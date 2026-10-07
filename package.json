@@ -1,0 +1,6 @@
+{
+  "name": "akko-cs-challenge",
+  "private": true,
+  "type": "module",
+  "description": "Akko high-school computer science code-tracing competition"
+}
