@@ -3,17 +3,19 @@
    השאלות, התשובות והניקוד נמצאים בשרת (תיקיית api/),
    כך שהתשובות הנכונות אינן חשופות בקוד הדף.
    ========================================================= */
-const KINDS = ['loop','prog','rec','loop','prog','rec','loop','prog','rec','rec'];
-const KIND_LABEL = {loop:'לולאה · פעולה חיצונית', prog:'לולאה · תוכנית', rec:'רקורסיה · מערך'};
+const KINDS = ['gen','gen','gen','rec','loop','prog','rec','think','think','think'];
+const KIND_LABEL = {gen:'מדעי המחשב · כללי', loop:'קוד · לולאה ומחרוזת', prog:'קוד · תוכנית ומערך', rec:'קוד · רקורסיה ומערך', think:'אתגר חשיבה'};
+const KIND_TIME = {gen:120, loop:300, prog:300, rec:300, think:300};
+const OFFLINE = typeof LOCAL_API !== 'undefined';
 const LETTERS = ['א','ב','ג','ד'];
 
 /* ---------- אחסון מקומי (משחק פתוח והגדרות של המחשב הזה) ---------- */
-const KEY_CUR='akkoCS_online_current_v1', KEY_SET='akkoCS_settings_v1';
+const KEY_CUR=OFFLINE?'akkoCS_offline_current_v2':'akkoCS_online_current_v2', KEY_SET='akkoCS_settings_v2';
 const mem={};
 function load(k,def){let v=null;try{v=localStorage.getItem(k)}catch(e){}if(v==null)v=mem[k];try{return v?JSON.parse(v):def}catch(e){return def}}
 function save(k,v){const s=JSON.stringify(v);mem[k]=s;try{localStorage.setItem(k,s)}catch(e){}}
 function del(k){delete mem[k];try{localStorage.removeItem(k)}catch(e){}}
-let settings = Object.assign({timer:300, sound:true, lang:'java'}, load(KEY_SET,{}));
+let settings = Object.assign({timerOn:true, sound:true, lang:'java'}, load(KEY_SET,{}));
 let game = load(KEY_CUR,null);
 let screen = 'home';
 let tickHandle = null;
@@ -22,6 +24,7 @@ let lastFinished = null;
 
 /* ---------- שרת ---------- */
 async function api(path,data){
+  if(OFFLINE) return LOCAL_API[path](JSON.parse(JSON.stringify(data||{})));
   let r;
   try{
     r=await fetch('/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{cache:'no-store'});
@@ -164,31 +167,32 @@ async function abandon(){
 
 /* ---------- 2. הנחיות ---------- */
 function renderRules(app){
-  const t=settings.timer;
   app.innerHTML=cornerHTML()+`<div class="wrap" style="padding-top:60px"><div class="card">
     <h1>📜 הנחיות לפעילות</h1>
-    <p class="muted" style="font-size:18px;line-height:1.7">כל צוות מקבל 10 שאלות מעקב אחר קוד. בכל שאלה מוצג קטע קוד — פעולה (מתודה) חיצונית, תוכנית ראשית או פעולה רקורסיבית. שימו לב: <b style="color:var(--gold2)">שמות הפעולות אינם מרמזים על תפקידן</b> — עליכם לעקוב אחר הקוד בעצמכם!</p>
+    <p class="muted" style="font-size:18px;line-height:1.7">כל צוות מקבל 10 שאלות בשלושה שלבים, 10 נקודות לכל שאלה — 100 נקודות בסך הכל. בשאלות הקוד שימו לב: <b style="color:var(--gold2)">שמות הפעולות אינם מרמזים על תפקידן</b> — עליכם לעקוב אחר הקוד בעצמכם!</p>
     <div class="steps">
-      <div class="step"><div class="num">1</div><h3>רשמו את הצוות</h3><div class="muted">הזינו את שם הצוות ואת שם בית הספר, ובחרו שפת תכנות: Java או C#.</div></div>
-      <div class="step"><div class="num">2</div><h3>עקבו אחר הקוד</h3><div class="muted">לכל שאלה יש קריאה לפעולה עם ערכי הפרמטרים. עקבו שלב אחר שלב — מומלץ עם טבלת מעקב על דף.</div></div>
-      <div class="step"><div class="num">3</div><h3>ענו על 3 סעיפים</h3><div class="muted">מה יודפס? מה יוחזר (או מה ערך המשתנה)? ומה התפקיד של הקוד?</div></div>
-      <div class="step"><div class="num">4</div><h3>הגישו ולמדו</h3><div class="muted">לאחר ההגשה תראו מה צדקתם, את הניקוד ואת הסבר הפתרון. אין חזרה לשאלה קודמת.</div></div>
+      <div class="step"><div class="num">1–3</div><h3>🧠 מדעי המחשב — כללי</h3><div class="muted">3 שאלות ידע וחשיבה: ייצוג מידע, יעילות ומבני נתונים. ${settings.timerOn?'2 דקות לשאלה.':''}</div></div>
+      <div class="step"><div class="num">4–7</div><h3>💻 שאלות קוד</h3><div class="muted">4 שאלות מעקב: רקורסיה, לולאות, מערכים ומחרוזות. לכל שאלה 3 סעיפים — מה יודפס, מה יוחזר ומה התפקיד. ${settings.timerOn?'5 דקות לשאלה.':''}</div></div>
+      <div class="step"><div class="num">8–10</div><h3>🏰 אתגרי חשיבה</h3><div class="muted">3 חידות אלגוריתמיות לסיום — חשבו לפני שאתם עונים! ${settings.timerOn?'5 דקות לשאלה.':''}</div></div>
+      <div class="step"><div class="num">✔</div><h3>הגישו ולמדו</h3><div class="muted">לאחר ההגשה תראו מה צדקתם, את הניקוד ואת הסבר הפתרון. אין חזרה לשאלה קודמת.</div></div>
     </div>
     <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
-      <div class="step"><h3>🎯 ניקוד לכל שאלה (10 נק')</h3>
+      <div class="step"><h3>🎯 ניקוד</h3>
         <table class="pts-table">
-          <tr><td>מה יודפס</td><td>3 נק'</td></tr>
-          <tr><td>מה יוחזר / ערך המשתנה בסוף</td><td>3 נק'</td></tr>
-          <tr><td>מה תפקיד הקוד</td><td>4 נק'</td></tr>
+          <tr><td>שאלה כללית / אתגר — תשובה נכונה</td><td>10 נק'</td></tr>
+          <tr><td>שאלת קוד — מה יודפס</td><td>3 נק'</td></tr>
+          <tr><td>שאלת קוד — מה יוחזר / ערך המשתנה</td><td>3 נק'</td></tr>
+          <tr><td>שאלת קוד — מה תפקיד הקוד</td><td>4 נק'</td></tr>
           <tr><td><b>סה"כ במשחק</b></td><td>100 נק'</td></tr>
         </table></div>
       <div class="step"><h3>⏱️ זמן ושוויון</h3>
-        <div class="muted" style="line-height:1.7">${t?`לכל שאלה <b style="color:var(--gold2)">${fmtTime(t)}</b> דקות. כשהזמן נגמר — התשובות שסומנו מוגשות אוטומטית.`:'אין הגבלת זמן לשאלה.'}
+        <div class="muted" style="line-height:1.7">${settings.timerOn?'לכל שאלה מוגבל זמן (מוצג בראש המסך). כשהזמן נגמר — התשובות שסומנו מוגשות אוטומטית.':'הגבלת הזמן כבויה.'}
         הניקוד שלכם מוצג כל הזמן בראש המסך. במקרה של שוויון בנקודות — מנצח הצוות שסיים בזמן הקצר יותר.</div>
-        <label class="f">זמן לשאלה (למארגנים):</label>
-        <select class="in" onchange="settings.timer=+this.value;save(KEY_SET,settings);render()">
-          ${[[0,'ללא הגבלה'],[180,'3 דקות'],[240,'4 דקות'],[300,'5 דקות'],[420,'7 דקות'],[600,'10 דקות']].map(([v,l])=>`<option value="${v}" ${v===t?'selected':''}>${l}</option>`).join('')}
-        </select></div>
+        <label class="f">הגבלת זמן (למארגנים):</label>
+        <div class="seg">
+          <button class="${settings.timerOn?'on':''}" onclick="settings.timerOn=true;save(KEY_SET,settings);render()">פעילה</button>
+          <button class="${settings.timerOn?'':'on'}" onclick="settings.timerOn=false;save(KEY_SET,settings);render()">כבויה</button>
+        </div></div>
       <div class="step"><h3>🗺️ מפת השאלות</h3>
         <div class="qmap">${KINDS.map((k,i)=>`<div><b>${i+1}.</b> ${KIND_LABEL[k]}</div>`).join('')}</div></div>
     </div>
@@ -239,7 +243,7 @@ function renderRegister(app){
       const r=await api('start',{team,school,members,lang});
       settings.lang=lang;save(KEY_SET,settings);
       game={id:r.id,team,school,members,lang,questions:r.questions,qIndex:0,score:0,
-        results:[],answers:[null,null,null],qStart:Date.now(),submitted:false};
+        results:[],answers:blankAnswers(r.questions[0]),qStart:Date.now(),submitted:false};
       save(KEY_CUR,game);sfx.win();go('game');
     }catch(e){
       $('#err').textContent=e.message;sfx.bad();btn.disabled=false;btn.textContent='🚀 התחל את האתגר';busy=false;
@@ -251,11 +255,28 @@ function renderRegister(app){
 
 /* ---------- 4. משחק ---------- */
 let submitting=false;
+const blankAnswers=q=>q.parts.map(()=>null);
+const timeLimit=q=>settings.timerOn?(q.time||KIND_TIME[q.kind]||300):0;
+function codeColumn(q,L){
+  const code=toLang(q.code,L),call=q.call?toLang(q.call,L):null;
+  const fileName=L==='cs'?q.file.replace('.java','.cs'):q.file;
+  return `<div class="codebox">
+      <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${fileName}</span></div>
+      <pre class="code">${highlight(code)}</pre>
+    </div>
+    ${call?`<div class="callbox"><h4>📞 הקריאה לפעולה</h4><pre>${highlight(call)}</pre>
+      <div class="muted" style="margin-bottom:6px;font-size:14px">ערכי הפרמטרים בקריאה הראשונה:</div>
+      <div class="params">${q.params.map(([n,v])=>`<span class="param"><b>${n}</b> = ${esc(v)}</span>`).join('')}</div></div>`
+    :`<div class="callbox"><h4>▶ הרצה</h4><div class="muted">התוכנית הראשית מורצת פעם אחת. עקבו אחר ערכי המשתנים בכל סיבוב של הלולאה.</div></div>`}`;
+}
+function promptColumn(q){
+  const icon=q.kind==='think'?'🏰':'🧠';
+  return `<div class="prompt ${q.kind}"><div class="picon">${icon}</div><h3>${esc(q.title)}</h3>
+    ${q.prompt.split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>`;
+}
 function renderGame(app){
   if(!game){go('home');return}
   const qi=game.qIndex,q=game.questions[qi],L=game.lang;
-  const code=toLang(q.code,L),call=q.call?toLang(q.call,L):null;
-  const fileName=L==='cs'?q.file.replace('.java','.cs'):q.file;
   const dots=game.questions.map((_,i)=>{
     const r=game.results[i];const cls=r?qScoreClass(r.earned):(i===qi?'cur':'');
     return `<div class="dot ${cls}">${i+1}</div>`}).join('');
@@ -264,7 +285,7 @@ function renderGame(app){
     <div class="team-chip"><b>${esc(game.team)}</b><span>${esc(game.school)}</span></div>
     <div class="dots">${dots}</div>
     <div class="row">
-      ${settings.timer?`<div class="timer" id="timer">--:--</div>`:''}
+      ${timeLimit(q)?`<div class="timer" id="timer">--:--</div>`:''}
       <div class="score-box"><span class="lbl">ניקוד</span><span class="val" id="score">${game.score}</span><span class="lbl">/100</span></div>
       <button class="icon-btn" title="צלילים" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
       <button class="icon-btn" title="מסך מלא" onclick="toggleFS()">⛶</button>
@@ -275,21 +296,12 @@ function renderGame(app){
     <div class="qhead">
       <h2 style="margin:0">שאלה ${qi+1} <span class="muted" style="font-weight:400">מתוך 10</span></h2>
       <span class="badge ${q.kind}">${KIND_LABEL[q.kind]}</span>
-      <span class="muted">${q.title} · 10 נק'</span>
+      <span class="muted">${q.code?esc(q.title)+' · ':''}10 נק'${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' דק\'':''}</span>
     </div>
     <div class="qgrid">
-      <div>
-        <div class="codebox">
-          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${fileName}</span></div>
-          <pre class="code">${highlight(code)}</pre>
-        </div>
-        ${call?`<div class="callbox"><h4>📞 הקריאה לפעולה</h4><pre>${highlight(call)}</pre>
-          <div class="muted" style="margin-bottom:6px;font-size:14px">ערכי הפרמטרים בקריאה הראשונה:</div>
-          <div class="params">${q.params.map(([n,v])=>`<span class="param"><b>${n}</b> = ${esc(v)}</span>`).join('')}</div></div>`
-        :`<div class="callbox"><h4>▶ הרצה</h4><div class="muted">התוכנית הראשית מורצת פעם אחת. עקבו אחר ערכי המשתנים בכל סיבוב של הלולאה.</div></div>`}
-      </div>
+      <div>${q.code?codeColumn(q,L):promptColumn(q)}</div>
       <div id="parts">
-        ${q.parts.map((p,pi)=>`<div class="part"><h4><span>${pi+1}. ${p.q}</span><small>${p.pts} נק'</small></h4>
+        ${q.parts.map((p,pi)=>`<div class="part"><h4><span>${q.parts.length>1?(pi+1)+'. ':''}${p.q}</span><small>${p.pts} נק'</small></h4>
           <div class="opts">${p.o.map((txt,oi)=>`<button class="opt" data-p="${pi}" data-o="${oi}">
             <span class="let">${LETTERS[oi]}</span><span class="txt ${p.mono?'mono':''}">${esc(p.mono?toLang(txt,L):txt)}</span></button>`).join('')}</div></div>`).join('')}
         <div class="submit-row" id="submitRow"></div>
@@ -315,20 +327,21 @@ function paintAnswers(errMsg){
   });
   const row=$('#submitRow');if(!row)return;
   if(game.submitted){row.innerHTML='';return}
-  const n=game.answers.filter(a=>a!=null).length;
+  const n=game.answers.filter(a=>a!=null).length,N=q.parts.length;
   if(errMsg){
     row.innerHTML=`<span class="offline" style="flex:1">⚠️ ${esc(errMsg)}</span><button class="btn" id="subBtn">🔄 נסו לשלוח שוב</button>`;
   }else{
-    row.innerHTML=`<span class="muted">נבחרו ${n} מתוך 3 סעיפים</span>
-      <button class="btn" id="subBtn" ${n<3||submitting?'disabled':''}>${submitting?'⏳ שולח...':'✔ הגש תשובה'}</button>`;
+    row.innerHTML=`<span class="muted">${N>1?`נבחרו ${n} מתוך ${N} סעיפים`:(n?'נבחרה תשובה':'בחרו תשובה')}</span>
+      <button class="btn" id="subBtn" ${n<N||submitting?'disabled':''}>${submitting?'⏳ שולח...':'✔ הגש תשובה'}</button>`;
   }
   $('#subBtn').onclick=()=>submit(game.timedOut);
 }
 function startTimer(){
   clearInterval(tickHandle);
-  if(!settings.timer) return;
+  const limit=timeLimit(game.questions[game.qIndex]);
+  if(!limit) return;
   const tick=()=>{
-    const left=settings.timer-(Date.now()-game.qStart)/1000,el=$('#timer');
+    const left=limit-(Date.now()-game.qStart)/1000,el=$('#timer');
     if(el){el.textContent=fmtTime(left);el.classList.toggle('warn',left<=30)}
     if(left<=0){clearInterval(tickHandle);if(el)el.classList.remove('warn');submit(true)}
   };
@@ -372,7 +385,7 @@ function showFeedback(scroll){
 }
 function next(){
   if(game.qIndex<game.questions.length-1){
-    game.qIndex++;game.answers=[null,null,null];game.submitted=false;game.timedOut=false;game.qStart=Date.now();
+    game.qIndex++;game.answers=blankAnswers(game.questions[game.qIndex]);game.submitted=false;game.timedOut=false;game.qStart=Date.now();
     save(KEY_CUR,game);go('game');
   }else finish();
 }
@@ -412,7 +425,7 @@ let boardCache=null;
 function renderBoard(app){
   app.innerHTML=cornerHTML()+`<div class="wrap" style="padding-top:60px"><div class="card">
     <div class="row" style="justify-content:space-between">
-      <h1 style="margin:0">🏆 טבלת המובילים <span class="live">● חי</span></h1>
+      <h1 style="margin:0">🏆 טבלת המובילים ${OFFLINE?'<span class="muted" style="font-size:14px">📴 גרסה מקומית</span>':'<span class="live">● חי</span>'}</h1>
       <div class="row">
         <button class="btn sm ghost" onclick="go('home')">🏠 דף הפתיחה</button>
         <button class="btn sm" onclick="go('rules')">▶ צוות חדש</button>
@@ -424,13 +437,15 @@ function renderBoard(app){
         <button class="btn sm sea" onclick="exportCSV()">⬇ ייצוא ל-Excel ‏(CSV)</button>
         <button class="btn sm ghost" onclick="exportJSON()">💾 גיבוי (JSON)</button>
         ${adminPass?`
-        <button class="btn sm ghost" onclick="$('#imp').click()">📂 ייבוא תוצאות מהגרסה המקומית</button>
+        <button class="btn sm ghost" onclick="$('#imp').click()">📂 ${OFFLINE?'ייבוא ומיזוג גיבוי':'ייבוא תוצאות מהגרסה המקומית'}</button>
         <input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this.files[0])">
         <button class="btn sm danger" onclick="clearBoard()">🗑 ניקוי הטבלה</button>
         <button class="btn sm ghost" onclick="adminPass=null;render()">🔒 יציאת מארגן</button>`
         :`<button class="btn sm ghost" onclick="adminLogin()">🔑 כניסת מארגן</button>`}
       </div>
-      <p class="muted" style="font-size:14px;line-height:1.6">הטבלה משותפת לכל המחשבים ומתעדכנת אוטומטית כל 10 שניות. במצב מארגן אפשר למחוק תוצאה בודדת (🗑 בשורה), לנקות את הטבלה, ולייבא קובץ גיבוי שיוצא מהגרסה המקומית — למקרה שחלק מהצוותים שיחקו בלי רשת.</p>
+      <p class="muted" style="font-size:14px;line-height:1.6">${OFFLINE
+        ?'גרסה מקומית: התוצאות נשמרות רק בדפדפן של המחשב הזה. כשהרשת חוזרת — ייצאו "גיבוי (JSON)" וייבאו אותו בטבלה המקוונת דרך כלי המארגנים.'
+        :'הטבלה משותפת לכל המחשבים ומתעדכנת אוטומטית כל 10 שניות. במצב מארגן אפשר למחוק תוצאה בודדת (🗑 בשורה), לנקות את הטבלה, ולייבא קובץ גיבוי שיוצא מהגרסה המקומית — למקרה שחלק מהצוותים שיחקו בלי רשת.'}</p>
     </details>
   </div></div>`;
   const refresh=()=>fetchBoard().then(b=>{boardCache=b;const el=$('#boardBody');if(el&&screen==='board')el.innerHTML=boardHTML(b)})
@@ -461,6 +476,7 @@ function boardHTML(board){
 }
 async function adminCall(data){return api('admin',Object.assign({password:adminPass},data))}
 async function adminLogin(){
+  if(OFFLINE){adminPass='local';render();return}
   const p=await modal('כניסת מארגן','הזינו את סיסמת המארגנים (ADMIN_PASSWORD שהוגדרה ב-Vercel).','כניסה','ביטול',false,true);
   if(!p) return;
   try{await api('admin',{password:p,action:'verify'});adminPass=p;render()}
