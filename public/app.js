@@ -135,7 +135,7 @@ function renderHome(app){
     <span class="kicker">יום שיא במדעי המחשב · תיכוני עכו</span>
     ${skylineSVG()}
     <h1>אתגר הקוד של עכו</h1>
-    <div class="sub">10 שאלות מעקב · לולאות ורקורסיה · 100 נקודות · צוות אחד יכבוש את החומות</div>
+    <div class="sub">10 שאלות · ידע במדעי המחשב, מעקב קוד ואתגרי חשיבה · 100 נקודות · צוות אחד יכבוש את החומות</div>
     <div class="row">
       <button class="btn" onclick="sfx.click();go('rules')">▶ התחילו לשחק</button>
       <button class="btn sea" onclick="sfx.click();go('board')">🏆 טבלת המובילים</button>
