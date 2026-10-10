@@ -120,8 +120,7 @@ function skylineSVG(){
     <rect x="64" y="30" width="34" height="12" rx="2" fill="#13325a"/><polygon points="81,14 62,30 100,30" fill="#ff5d6c"/>
     <polygon points="92,36 230,6 230,60" fill="#ffd77a" opacity=".18"/>
     <path d="M0 120 h40 v-10 h14 v10 h20 v-10 h14 v10 h20 v-10 h14 v10 h20 v-10 h14 v10 h40 V190 H0Z" fill="url(#wall)"/>
-    <rect x="330" y="96" width="120" height="40" fill="url(#wall)"/><path d="M345 96 a45 40 0 0 1 90 0Z" fill="#2ec4d6"/><rect x="386" y="44" width="8" height="14" fill="#f5b942"/>
-    <rect x="470" y="34" width="18" height="102" fill="url(#wall)"/><polygon points="479,0 466,34 492,34" fill="#2ec4d6"/><rect x="464" y="60" width="30" height="5" fill="#9b6a17"/>
+    <rect x="330" y="100" width="120" height="40" fill="#b07f20"/>
     <rect x="240" y="104" width="70" height="40" fill="#c58d24"/><rect x="510" y="98" width="80" height="46" fill="#c58d24"/><rect x="600" y="110" width="60" height="34" fill="#a8761b"/>
     <path d="M200 132 h30 v-12 h12 v12 h30 v-12 h12 v12 h420 V190 H200Z" fill="url(#wall)"/>
     <g fill="#081629" opacity=".7"><rect x="256" y="114" width="10" height="14" rx="5"/><rect x="284" y="114" width="10" height="14" rx="5"/><rect x="528" y="110" width="10" height="16" rx="5"/><rect x="556" y="110" width="10" height="16" rx="5"/></g>
