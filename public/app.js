@@ -171,7 +171,7 @@ function renderHome(app){
       <button class="btn" onclick="sfx.click();go('rules')">${t('play')}</button>
       <button class="btn sea" onclick="sfx.click();go('board')">${t('board')}</button>
     </div>
-    ${game?`<div class="resume">${t('resume',esc(game.team),esc(game.school),game.stage==='bonusIntro'?t('bonusStageTitle'):qLabel(game.qIndex))}
+    ${game?`<div class="resume">${t('resume',esc(game.team),esc(game.school),qLabel(game.qIndex))}
       <div class="row" style="justify-content:center;margin-top:10px">
         <button class="btn sm" onclick="go('game')">${t('resumeBtn')}</button>
         <button class="btn sm ghost" onclick="abandon()">${t('abandonBtn')}</button></div></div>`:''}
@@ -199,7 +199,7 @@ function renderRules(app){
       <div class="step"><div class="num">1–3</div><h3>${t('stage1Title')}</h3><div class="muted">${t('stage1Body')} ${tm('min2')}</div></div>
       <div class="step"><div class="num">4–7</div><h3>${t('stage2Title')}</h3><div class="muted">${t('stage2Body')} ${tm('min5')}</div></div>
       <div class="step"><div class="num">8–10</div><h3>${t('stage3Title')}</h3><div class="muted">${t('stage3Body')} ${tm('min5')}</div></div>
-      <div class="step bonus"><div class="num">11–20</div><h3>${t('bonusStageTitle')}</h3><div class="muted">${t('bonusStageBody')} ${tm('min3')}</div></div>
+      <div class="step bonus"><div class="num">11–20</div><h3>${t('bonusStageTitle')}</h3><div class="muted">${t('bonusStageBody')}</div></div>
       <div class="step"><div class="num">✔</div><h3>${t('stage4Title')}</h3><div class="muted">${t('stage4Body')}</div></div>
     </div>
     <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
@@ -283,7 +283,8 @@ function renderRegister(app){
 /* ---------- 4. משחק ---------- */
 let submitting=false;
 const blankAnswers=q=>q.parts.map(()=>null);
-const timeLimit=q=>settings.timerOn?(q.time||KIND_TIME[q.kind]||300):0;
+// The bonus questions have no time limit.
+const timeLimit=q=>settings.timerOn&&!q.bonus?(q.time||KIND_TIME[q.kind]||300):0;
 function codeColumn(q,L){
   // A question may give its own C# version (csCode / csCall) when a simple rename is not enough.
   const cs=L==='cs'&&q.csCode;
@@ -301,7 +302,7 @@ function codeColumn(q,L){
 function promptColumn(q){
   const icon=KIND_ICON[q.kind]||'🧠';
   return `<div class="prompt ${q.kind}"><div class="picon">${icon}</div><h3>${esc(tx(q.title))}</h3>
-    ${tx(q.prompt).split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>`;
+    ${tx(q.prompt).split('\n').map(l=>`<p dir="auto">${esc(l)}</p>`).join('')}</div>`;
 }
 // The main questions come first, then the optional bonus stage (questions marked `bonus`).
 const mainCount=()=>game.questions.filter(q=>!q.bonus).length;
@@ -312,7 +313,6 @@ const sum=a=>a.reduce((s,e)=>s+(e||0),0);
 const rowMain=r=>r.score-(r.bonus||0);
 function renderGame(app){
   if(!game){go('home');return}
-  if(game.stage==='bonusIntro'){renderBonusIntro(app);return}
   const qi=game.qIndex,q=game.questions[qi],L=game.lang,letters=t('letters'),M=mainCount(),inBonus=!!q.bonus;
   // The top bar shows the dots of the current stage only.
   const dots=game.questions.map((_,i)=>i).filter(i=>!!game.questions[i].bonus===inBonus)
@@ -323,7 +323,7 @@ function renderGame(app){
     <div class="dots">${dots}</div>
     <div class="row">
       ${timeLimit(q)?`<div class="timer" id="timer">--:--</div>`:''}
-      <div class="score-box"><span class="lbl">${t('score')}</span><span class="val" id="score">${game.score}</span><span class="lbl">/${inBonus?200:100}</span></div>
+      <div class="score-box"><span class="lbl">${t('score')}</span><span class="val" id="score">${game.score}</span><span class="lbl">/100</span></div>
       ${langBtn()}
       <button class="icon-btn" title="${t('sound')}" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
       <button class="icon-btn" title="${t('fullscreen')}" onclick="toggleFS()">⛶</button>
@@ -355,20 +355,6 @@ function renderGame(app){
   if(game.submitted) showFeedback(false);
   else startTimer();
 }
-// Between the main questions and the bonus: the result is already on the leaderboard, the bonus is optional.
-function renderBonusIntro(app){
-  const main=sum(game.results.slice(0,mainCount()).map(r=>r.earned));
-  app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap" style="max-width:820px"><div class="card bonus" style="text-align:center">
-    <div style="color:var(--sea);font-weight:500">${esc(game.team)} · ${esc(game.school)}</div>
-    <h1 style="margin-top:8px">${t('introTitle')}</h1>
-    <p style="font-size:20px">${t('introScore',main)}</p>
-    <div class="bonus-intro"><h2>${t('introHead')}</h2><p class="muted">${t('introBody')}</p></div>
-    <div class="row" style="justify-content:center">
-      <button class="btn violet" onclick="sfx.click();startBonus()">${t('startBonus')}</button>
-      <button class="btn ghost" onclick="finish()">${t('noBonus')}</button>
-    </div></div></div></div>`;
-}
-function startBonus(){game.stage=null;advance()}
 function paintAnswers(errMsg){
   const q=game.questions[game.qIndex],r=game.results[game.qIndex];
   document.querySelectorAll('.opt').forEach(b=>{
@@ -435,16 +421,23 @@ function showFeedback(scroll){
       ${r.skipped?'':`<span class="muted">${r.correct.map((c,i)=>`${i+1}: ${c?'✅':'❌'}`).join(' &nbsp; ')}</span>`}
     </div>
     <div class="exp"><b>${t('explain')}</b> ${esc(tx(r.explain))}</div>
+    ${toBonus?`
+    <div class="bonus-intro"><p style="margin-bottom:10px">${t('introScore',game.score)}</p>
+      <h2>${t('introHead')}</h2><p class="muted">${t('introBody')}</p></div>
+    <div class="row" style="justify-content:flex-start">
+      <button class="btn violet" id="bonusBtn">${t('startBonus')}</button>
+      <button class="btn ghost" id="finishBtn">${t('noBonus')}</button>
+    </div>`:`
     <div class="row" style="justify-content:flex-start;margin-top:14px">
-      <button class="btn ${toBonus?'violet':''}" id="nextBtn">${last?t('toResults'):toBonus?t('toBonus'):t('nextQ')}</button>
-    </div></div>`;
-  $('#nextBtn').onclick=next;
+      <button class="btn" id="nextBtn">${last?t('toResults'):t('nextQ')}</button>
+    </div>`}</div>`;
+  // After the last main question: continue to the optional bonus, or finish (the result is already saved).
+  if(toBonus){$('#bonusBtn').onclick=()=>{sfx.click();advance()};$('#finishBtn').onclick=finish}
+  else $('#nextBtn').onclick=next;
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
 }
 function next(){
-  const M=mainCount();
-  if(game.qIndex===M-1&&game.questions.length>M){game.stage='bonusIntro';save(KEY_CUR,game);go('game')}
-  else if(game.qIndex<game.questions.length-1) advance();
+  if(game.qIndex<game.questions.length-1) advance();
   else finish();
 }
 function advance(){
