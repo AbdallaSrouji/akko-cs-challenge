@@ -335,7 +335,7 @@ function renderGame(app){
       <h2 style="margin:0">${inBonus?t('bonusQ',qi-M+1):t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
       <span class="badge ${q.kind}">${t('kind')[q.kind]}</span>
       <span class="muted">${q.code?esc(tx(q.title))+' · ':''}${t('pts',10)}${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' '+t('minutes'):''}</span>
-      ${inBonus?`<button class="btn sm ghost" style="margin-inline-start:auto" onclick="finishEarly()">${t('finishNow')}</button>`:''}
+      <button class="btn sm ghost" style="margin-inline-start:auto" onclick="finishEarly()">${t('finishNow')}</button>
     </div>
     <div class="qgrid">
       <div>${q.code?codeColumn(q,L):promptColumn(q)}</div>
@@ -437,11 +437,19 @@ function showFeedback(scroll){
   else $('#nextBtn').onclick=next;
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
 }
-// Ends the game in the middle of the bonus (each school has limited time). The leaderboard row already
-// holds the main score plus the bonus answered so far; the remaining bonus questions count as 0.
+// Ends the game early (each school has a limited time slot). The server scores every main question not
+// answered yet as 0 and saves the row; in the bonus the row is already saved and the rest of the bonus counts as 0.
+let finishing=false;
 async function finishEarly(){
-  if(submitting) return;
-  if(await modal(t('finishTitle'),t('finishBody',game.score),t('finishYes'),t('cancel'))) finish();
+  if(submitting||finishing) return;
+  const body=game.questions[game.qIndex].bonus?'finishBody':'finishBodyMain';
+  // The question timer waits while the team decides, so it cannot submit in the middle of finishing.
+  clearInterval(tickHandle);
+  if(!await modal(t('finishTitle'),t(body,game.score),t('finishYes'),t('cancel'))){if(!game.submitted)startTimer();return}
+  finishing=true;
+  try{const r=await api('answer',{id:game.id,finish:true});game.score=r.score;finish()}
+  catch(e){errModal(e)}
+  finally{finishing=false}
 }
 function next(){
   if(game.qIndex<game.questions.length-1) advance();

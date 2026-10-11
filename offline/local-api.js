@@ -15,14 +15,15 @@ const LOCAL_API = (() => {
     async answer(d) {
       const games = load(KG, {}), game = games[d.id];
       if (!game) throw new Error('המשחק לא נמצא.');
-      const { result, record } = applyAnswer(game, d.q, d.answers, !!d.skip);
+      // `finish` ends the game early; otherwise one answer is scored (see api/answer.js).
+      const { result, record, score } = d.finish ? finishGame(game) : applyAnswer(game, d.q, d.answers, !!d.skip);
       if (record) {
         // The row is saved after the main questions and updated after every bonus answer.
         save(KB, [...board().filter(r => r.id !== record.id), record]);
       }
-      if (result.done) delete games[d.id];
+      if (d.finish || result.done) delete games[d.id];
       save(KG, games);
-      return result;
+      return d.finish ? { score } : result;
     },
     async scores() { return { board: sorted(board()) }; },
     async admin(d) {
