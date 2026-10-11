@@ -16,7 +16,7 @@ const mem={};
 function load(k,def){let v=null;try{v=localStorage.getItem(k)}catch(e){}if(v==null)v=mem[k];try{return v?JSON.parse(v):def}catch(e){return def}}
 function save(k,v){const s=JSON.stringify(v);mem[k]=s;try{localStorage.setItem(k,s)}catch(e){}}
 function del(k){delete mem[k];try{localStorage.removeItem(k)}catch(e){}}
-let settings = Object.assign({timerOn:true, sound:true, lang:'java', ui:'he'}, load(KEY_SET,{}));
+let settings = Object.assign({sound:true, lang:'java', ui:'he'}, load(KEY_SET,{}));
 let game = load(KEY_CUR,null);
 let screen = 'home';
 let tickHandle = null;
@@ -193,14 +193,13 @@ async function abandon(){
 
 /* ---------- 2. הנחיות ---------- */
 function renderRules(app){
-  const tm=k=>settings.timerOn?t(k):'';
   app.innerHTML=cornerHTML()+`<div class="wrap" style="padding-top:60px"><div class="card">
     <h1>${t('rulesTitle')}</h1>
     <p class="muted" style="font-size:18px;line-height:1.7">${t('rulesIntro')}</p>
     <div class="steps">
-      <div class="step"><div class="num">1–3</div><h3>${t('stage1Title')}</h3><div class="muted">${t('stage1Body')} ${tm('min2')}</div></div>
-      <div class="step"><div class="num">4–7</div><h3>${t('stage2Title')}</h3><div class="muted">${t('stage2Body')} ${tm('min5')}</div></div>
-      <div class="step"><div class="num">8–10</div><h3>${t('stage3Title')}</h3><div class="muted">${t('stage3Body')} ${tm('min5')}</div></div>
+      <div class="step"><div class="num">1–3</div><h3>${t('stage1Title')}</h3><div class="muted">${t('stage1Body')} ${t('min2')}</div></div>
+      <div class="step"><div class="num">4–7</div><h3>${t('stage2Title')}</h3><div class="muted">${t('stage2Body')} ${t('min5')}</div></div>
+      <div class="step"><div class="num">8–10</div><h3>${t('stage3Title')}</h3><div class="muted">${t('stage3Body')} ${t('min5')}</div></div>
       <div class="step bonus"><div class="num">11–20</div><h3>${t('bonusStageTitle')}</h3><div class="muted">${t('bonusStageBody')}</div></div>
       <div class="step"><div class="num">✔</div><h3>${t('stage4Title')}</h3><div class="muted">${t('stage4Body')}</div></div>
     </div>
@@ -216,12 +215,7 @@ function renderRules(app){
           <tr><td><b>${t('total')}</b></td><td>${t('totalVal')}</td></tr>
         </table></div>
       <div class="step"><h3>${t('timeTitle')}</h3>
-        <div class="muted" style="line-height:1.7">${settings.timerOn?t('timeOn'):t('timeOff')} ${t('tieRule')}</div>
-        <label class="f">${t('timerLabel')}</label>
-        <div class="seg">
-          <button class="${settings.timerOn?'on':''}" onclick="settings.timerOn=true;save(KEY_SET,settings);render()">${t('timerActive')}</button>
-          <button class="${settings.timerOn?'':'on'}" onclick="settings.timerOn=false;save(KEY_SET,settings);render()">${t('timerOff')}</button>
-        </div></div>
+        <div class="muted" style="line-height:1.7">${t('timeOn')} ${t('tieRule')}</div></div>
       <div class="step"><h3>${t('mapTitle')}</h3>
         <div class="qmap">${KINDS.map((k,i)=>`<div><b>${i+1}.</b> ${t('kind')[k]}</div>`).join('')}</div></div>
     </div>
@@ -286,7 +280,7 @@ function renderRegister(app){
 let submitting=false;
 const blankAnswers=q=>q.parts.map(()=>null);
 // The bonus questions have no time limit.
-const timeLimit=q=>settings.timerOn&&!q.bonus?(q.time||KIND_TIME[q.kind]||300):0;
+const timeLimit=q=>!q.bonus?(q.time||KIND_TIME[q.kind]||300):0;
 function codeColumn(q,L){
   // A question may give its own C# version (csCode / csCall) when a simple rename is not enough.
   const cs=L==='cs'&&q.csCode;
