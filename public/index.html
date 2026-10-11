@@ -52,6 +52,9 @@ h1,h2,h3{margin:0 0 12px}
   background:linear-gradient(180deg,#fff, var(--gold2) 70%, var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
   text-shadow:0 0 40px rgba(245,185,66,.15)}
 .hero .sub{font-size:clamp(17px,2.4vw,24px);color:var(--muted);margin-bottom:26px}
+/* Arabic letters extend further below the line, so the title needs more height and space. */
+html[lang="ar"] .hero h1{line-height:1.45;padding-bottom:.08em;margin-bottom:22px}
+html[lang="ar"] .hero .sub{line-height:1.7}
 .skyline{width:100%;max-width:820px;height:auto;display:block;margin:0 auto 26px}
 .hero .row{justify-content:center}
 .stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px}
