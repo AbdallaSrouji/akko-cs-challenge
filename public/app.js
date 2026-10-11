@@ -7,6 +7,7 @@
 const KINDS = ['gen','gen','gen','rec','loop','prog','rec','think','think','think'];
 const KIND_TIME = {gen:120, loop:300, prog:300, rec:300, think:300, cipher:180, lateral:180};
 const KIND_ICON = {think:'🏰', cipher:'🔐', lateral:'💡'};
+const AUTO_NEXT_MS = 2000; // pause after an answer is shown before the next question
 const OFFLINE = typeof LOCAL_API !== 'undefined';
 
 /* ---------- אחסון מקומי (משחק פתוח והגדרות של המחשב הזה) ---------- */
@@ -19,6 +20,7 @@ let settings = Object.assign({timerOn:true, sound:true, lang:'java', ui:'he'}, l
 let game = load(KEY_CUR,null);
 let screen = 'home';
 let tickHandle = null;
+let autoNext = null; // moves to the next question shortly after an answer is shown
 let adminPass = null;
 let lastFinished = null;
 
@@ -118,7 +120,7 @@ function modal(title,body,okText=t('ok'),cancelText=t('cancel'),danger=false,wit
 const errModal=e=>modal(t('error'),esc(e.message||e),t('close'),null);
 
 /* ---------- ניווט ---------- */
-function go(s){screen=s;clearInterval(tickHandle);render();window.scrollTo(0,0)}
+function go(s){screen=s;clearInterval(tickHandle);clearTimeout(autoNext);render();window.scrollTo(0,0)}
 function render(){
   const app=$('#app');
   ({home:renderHome,rules:renderRules,register:renderRegister,game:renderGame,result:renderResult,board:renderBoard})[screen](app);
@@ -327,6 +329,7 @@ function renderGame(app){
       ${langBtn()}
       <button class="icon-btn" title="${t('sound')}" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
       <button class="icon-btn" title="${t('fullscreen')}" onclick="toggleFS()">⛶</button>
+      <button class="btn sm danger" onclick="finishEarly()">${t('finishNow')}</button>
       <button class="icon-btn" title="${t('homeTip')}" onclick="go('home')">🏠</button>
     </div>
   </div></div>
@@ -335,7 +338,6 @@ function renderGame(app){
       <h2 style="margin:0">${inBonus?t('bonusQ',qi-M+1):t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
       <span class="badge ${q.kind}">${t('kind')[q.kind]}</span>
       <span class="muted">${q.code?esc(tx(q.title))+' · ':''}${t('pts',10)}${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' '+t('minutes'):''}</span>
-      <button class="btn sm ghost" style="margin-inline-start:auto" onclick="finishEarly()">${t('finishNow')}</button>
     </div>
     <div class="qgrid">
       <div>${q.code?codeColumn(q,L):promptColumn(q)}</div>
@@ -435,6 +437,9 @@ function showFeedback(scroll){
   // After the last main question: continue to the optional bonus, or finish (the result is already saved).
   if(toBonus){$('#bonusBtn').onclick=()=>{sfx.click();advance()};$('#finishBtn').onclick=finish}
   else $('#nextBtn').onclick=next;
+  // Every other question moves on by itself after a short pause (the button skips the wait).
+  clearTimeout(autoNext);
+  if(!toBonus) autoNext=setTimeout(next,AUTO_NEXT_MS);
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
 }
 // Ends the game early (each school has a limited time slot). The server scores every main question not
@@ -443,12 +448,13 @@ let finishing=false;
 async function finishEarly(){
   if(submitting||finishing) return;
   const body=game.questions[game.qIndex].bonus?'finishBody':'finishBodyMain';
-  // The question timer waits while the team decides, so it cannot submit in the middle of finishing.
-  clearInterval(tickHandle);
-  if(!await modal(t('finishTitle'),t(body,game.score),t('finishYes'),t('cancel'))){if(!game.submitted)startTimer();return}
+  // The question timer and the move to the next question wait while the team decides.
+  clearInterval(tickHandle);clearTimeout(autoNext);
+  const resume=()=>{if(!game.submitted)startTimer();else showFeedback(false)};
+  if(!await modal(t('finishTitle'),t(body,game.score),t('finishYes'),t('cancel'))){resume();return}
   finishing=true;
   try{const r=await api('answer',{id:game.id,finish:true});game.score=r.score;finish()}
-  catch(e){errModal(e)}
+  catch(e){errModal(e);resume()}
   finally{finishing=false}
 }
 function next(){
