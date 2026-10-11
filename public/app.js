@@ -5,7 +5,8 @@
    טקסט הממשק נמצא ב-i18n.js (עברית / ערבית).
    ========================================================= */
 const KINDS = ['gen','gen','gen','rec','loop','prog','rec','think','think','think'];
-const KIND_TIME = {gen:120, loop:300, prog:300, rec:300, think:300};
+const KIND_TIME = {gen:120, loop:300, prog:300, rec:300, think:300, cipher:180, lateral:180};
+const KIND_ICON = {think:'🏰', cipher:'🔐', lateral:'💡'};
 const OFFLINE = typeof LOCAL_API !== 'undefined';
 
 /* ---------- אחסון מקומי (משחק פתוח והגדרות של המחשב הזה) ---------- */
@@ -70,7 +71,7 @@ function toLang(src,lang){
             .replace(/public static void main\(/g,'public static void Main(');
 }
 function highlight(code){
-  const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(\d+)\b|\b(public|static|int|void|return|if|else|while|for|new|boolean|bool|String|string|true|false)\b|\b([A-Za-z_]\w*)(?=\s*\()/gm;
+  const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(\d+)\b|\b(public|static|int|void|return|if|else|while|for|new|boolean|bool|char|String|string|true|false)\b|\b([A-Za-z_]\w*)(?=\s*\()/gm;
   let out='',last=0,m;
   while((m=re.exec(code))){
     out+=esc(code.slice(last,m.index));const tok=esc(m[0]);
@@ -170,7 +171,7 @@ function renderHome(app){
       <button class="btn" onclick="sfx.click();go('rules')">${t('play')}</button>
       <button class="btn sea" onclick="sfx.click();go('board')">${t('board')}</button>
     </div>
-    ${game?`<div class="resume">${t('resume',esc(game.team),esc(game.school),game.qIndex+1)}
+    ${game?`<div class="resume">${t('resume',esc(game.team),esc(game.school),game.stage==='bonusIntro'?t('bonusStageTitle'):qLabel(game.qIndex))}
       <div class="row" style="justify-content:center;margin-top:10px">
         <button class="btn sm" onclick="go('game')">${t('resumeBtn')}</button>
         <button class="btn sm ghost" onclick="abandon()">${t('abandonBtn')}</button></div></div>`:''}
@@ -198,6 +199,7 @@ function renderRules(app){
       <div class="step"><div class="num">1–3</div><h3>${t('stage1Title')}</h3><div class="muted">${t('stage1Body')} ${tm('min2')}</div></div>
       <div class="step"><div class="num">4–7</div><h3>${t('stage2Title')}</h3><div class="muted">${t('stage2Body')} ${tm('min5')}</div></div>
       <div class="step"><div class="num">8–10</div><h3>${t('stage3Title')}</h3><div class="muted">${t('stage3Body')} ${tm('min5')}</div></div>
+      <div class="step bonus"><div class="num">11–20</div><h3>${t('bonusStageTitle')}</h3><div class="muted">${t('bonusStageBody')} ${tm('min3')}</div></div>
       <div class="step"><div class="num">✔</div><h3>${t('stage4Title')}</h3><div class="muted">${t('stage4Body')}</div></div>
     </div>
     <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
@@ -207,7 +209,9 @@ function renderRules(app){
           <tr><td>${t('sc2')}</td><td>${t('pts',3)}</td></tr>
           <tr><td>${t('sc3')}</td><td>${t('pts',3)}</td></tr>
           <tr><td>${t('sc4')}</td><td>${t('pts',4)}</td></tr>
-          <tr><td><b>${t('total')}</b></td><td>${t('pts',100)}</td></tr>
+          <tr><td>${t('scBonus')}</td><td>${t('pts',10)}</td></tr>
+          <tr><td>${t('scSkip')}</td><td>${t('pts',0)}</td></tr>
+          <tr><td><b>${t('total')}</b></td><td>${t('totalVal')}</td></tr>
         </table></div>
       <div class="step"><h3>${t('timeTitle')}</h3>
         <div class="muted" style="line-height:1.7">${settings.timerOn?t('timeOn'):t('timeOff')} ${t('tieRule')}</div>
@@ -281,7 +285,9 @@ let submitting=false;
 const blankAnswers=q=>q.parts.map(()=>null);
 const timeLimit=q=>settings.timerOn?(q.time||KIND_TIME[q.kind]||300):0;
 function codeColumn(q,L){
-  const code=toLang(q.code,L),call=q.call?toLang(q.call,L):null;
+  // A question may give its own C# version (csCode / csCall) when a simple rename is not enough.
+  const cs=L==='cs'&&q.csCode;
+  const code=cs?q.csCode:toLang(q.code,L),call=cs?q.csCall:q.call?toLang(q.call,L):null;
   const fileName=L==='cs'?q.file.replace('.java','.cs'):q.file;
   return `<div class="codebox">
       <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${fileName}</span></div>
@@ -293,23 +299,31 @@ function codeColumn(q,L){
     :`<div class="callbox"><h4>${t('runTitle')}</h4><div class="muted">${t('runNote')}</div></div>`}`;
 }
 function promptColumn(q){
-  const icon=q.kind==='think'?'🏰':'🧠';
+  const icon=KIND_ICON[q.kind]||'🧠';
   return `<div class="prompt ${q.kind}"><div class="picon">${icon}</div><h3>${esc(tx(q.title))}</h3>
     ${tx(q.prompt).split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>`;
 }
+// The main questions come first, then the optional bonus stage (questions marked `bonus`).
+const mainCount=()=>game.questions.filter(q=>!q.bonus).length;
+const qLabel=i=>(game.questions[i].bonus?t('bonusQ',i-mainCount()+1):t('question',i+1))+' '+t('of10');
+const dotClass=i=>{const r=game.results[i];return 'dot'+(game.questions[i].bonus?' bonus':'')+' '+(r?(r.skipped?'skip':qScoreClass(r.earned)):(i===game.qIndex?'cur':''))};
+const sum=a=>a.reduce((s,e)=>s+(e||0),0);
+// The main-questions part of a leaderboard row (rows from before the bonus existed have no bonus fields).
+const rowMain=r=>r.score-(r.bonus||0);
 function renderGame(app){
   if(!game){go('home');return}
-  const qi=game.qIndex,q=game.questions[qi],L=game.lang,letters=t('letters');
-  const dots=game.questions.map((_,i)=>{
-    const r=game.results[i];const cls=r?qScoreClass(r.earned):(i===qi?'cur':'');
-    return `<div class="dot ${cls}">${i+1}</div>`}).join('');
+  if(game.stage==='bonusIntro'){renderBonusIntro(app);return}
+  const qi=game.qIndex,q=game.questions[qi],L=game.lang,letters=t('letters'),M=mainCount(),inBonus=!!q.bonus;
+  // The top bar shows the dots of the current stage only.
+  const dots=game.questions.map((_,i)=>i).filter(i=>!!game.questions[i].bonus===inBonus)
+    .map(i=>`<div class="${dotClass(i)}" data-i="${i}">${inBonus?i-M+1:i+1}</div>`).join('');
   app.innerHTML=`
   <div class="topbar"><div class="wrap">
     <div class="team-chip"><b>${esc(game.team)}</b><span>${esc(game.school)}</span></div>
     <div class="dots">${dots}</div>
     <div class="row">
       ${timeLimit(q)?`<div class="timer" id="timer">--:--</div>`:''}
-      <div class="score-box"><span class="lbl">${t('score')}</span><span class="val" id="score">${game.score}</span><span class="lbl">/100</span></div>
+      <div class="score-box"><span class="lbl">${t('score')}</span><span class="val" id="score">${game.score}</span><span class="lbl">/${inBonus?200:100}</span></div>
       ${langBtn()}
       <button class="icon-btn" title="${t('sound')}" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
       <button class="icon-btn" title="${t('fullscreen')}" onclick="toggleFS()">⛶</button>
@@ -318,7 +332,7 @@ function renderGame(app){
   </div></div>
   <div class="wrap">
     <div class="qhead">
-      <h2 style="margin:0">${t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
+      <h2 style="margin:0">${inBonus?t('bonusQ',qi-M+1):t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
       <span class="badge ${q.kind}">${t('kind')[q.kind]}</span>
       <span class="muted">${q.code?esc(tx(q.title))+' · ':''}${t('pts',10)}${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' '+t('minutes'):''}</span>
     </div>
@@ -341,6 +355,20 @@ function renderGame(app){
   if(game.submitted) showFeedback(false);
   else startTimer();
 }
+// Between the main questions and the bonus: the result is already on the leaderboard, the bonus is optional.
+function renderBonusIntro(app){
+  const main=sum(game.results.slice(0,mainCount()).map(r=>r.earned));
+  app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap" style="max-width:820px"><div class="card bonus" style="text-align:center">
+    <div style="color:var(--sea);font-weight:500">${esc(game.team)} · ${esc(game.school)}</div>
+    <h1 style="margin-top:8px">${t('introTitle')}</h1>
+    <p style="font-size:20px">${t('introScore',main)}</p>
+    <div class="bonus-intro"><h2>${t('introHead')}</h2><p class="muted">${t('introBody')}</p></div>
+    <div class="row" style="justify-content:center">
+      <button class="btn violet" onclick="sfx.click();startBonus()">${t('startBonus')}</button>
+      <button class="btn ghost" onclick="finish()">${t('noBonus')}</button>
+    </div></div></div></div>`;
+}
+function startBonus(){game.stage=null;advance()}
 function paintAnswers(errMsg){
   const q=game.questions[game.qIndex],r=game.results[game.qIndex];
   document.querySelectorAll('.opt').forEach(b=>{
@@ -356,9 +384,13 @@ function paintAnswers(errMsg){
     row.innerHTML=`<span class="offline" style="flex:1">⚠️ ${esc(errMsg)}</span><button class="btn" id="subBtn">${t('retry')}</button>`;
   }else{
     row.innerHTML=`<span class="muted">${N>1?t('selectedN',n,N):(n?t('selected1'):t('choose'))}</span>
-      <button class="btn" id="subBtn" ${n<N||submitting?'disabled':''}>${submitting?t('sending'):t('submit')}</button>`;
+      <div class="row">
+        ${q.bonus?`<button class="btn ghost" id="skipBtn" ${submitting?'disabled':''}>${t('skip')}</button>`:''}
+        <button class="btn" id="subBtn" ${n<N||submitting?'disabled':''}>${submitting?t('sending'):t('submit')}</button>
+      </div>`;
+    const sk=$('#skipBtn');if(sk) sk.onclick=()=>submit(false,true);
   }
-  $('#subBtn').onclick=()=>submit(game.timedOut);
+  $('#subBtn').onclick=()=>submit(game.timedOut,game.skipping);
 }
 function startTimer(){
   clearInterval(tickHandle);
@@ -371,76 +403,91 @@ function startTimer(){
   };
   tick();tickHandle=setInterval(tick,500);
 }
-async function submit(timeout){
+// skip: give up a bonus question (0 points). Stored on the game so a retry after a network error sends the same.
+async function submit(timeout,skip){
   if(game.submitted||submitting) return;
   clearInterval(tickHandle);
   if(timeout){game.timedOut=true;save(KEY_CUR,game)}
+  if(skip){game.skipping=true;save(KEY_CUR,game)}
   submitting=true;paintAnswers();
   const qi=game.qIndex,q=game.questions[qi];
   const answers=q.parts.map((p,i)=>game.answers[i]==null?null:canon(p.o[game.answers[i]]));
   let r;
-  try{r=await api('answer',{id:game.id,q:qi,answers})}
+  try{r=await api('answer',{id:game.id,q:qi,answers,skip:!!game.skipping})}
   catch(e){submitting=false;paintAnswers(e.message);sfx.bad();return}
   submitting=false;
-  game.results[qi]={earned:r.earned,correct:r.correct,right:r.right,explain:r.explain,timeout:!!game.timedOut};
+  game.results[qi]={earned:r.earned,correct:r.correct,skipped:!!r.skipped,right:r.right,explain:r.explain,timeout:!!game.timedOut};
   game.score=r.score;game.submitted=true;game.done=r.done;save(KEY_CUR,game);
-  r.earned===10?sfx.good():r.earned===0?sfx.bad():beep([523,659],.1);
+  r.skipped?sfx.click():r.earned===10?sfx.good():r.earned===0?sfx.bad():beep([523,659],.1);
   paintAnswers();showFeedback(true);
   const s=$('#score');if(s){s.textContent=game.score;s.classList.remove('bump');void s.offsetWidth;s.classList.add('bump')}
-  const dot=document.querySelectorAll('.dot')[qi];if(dot){dot.className='dot '+qScoreClass(r.earned)}
+  const dot=$(`.dot[data-i="${qi}"]`);if(dot){dot.className=dotClass(qi)}
 }
 function showFeedback(scroll){
-  const r=game.results[game.qIndex];
-  const last=game.qIndex===game.questions.length-1;
-  const msg=r.earned===10?t('perfect'):r.earned>=6?t('great'):r.earned>0?t('almost'):t('notThis');
-  const color=r.earned===10?'var(--ok)':r.earned===0?'var(--bad)':'var(--gold2)';
+  const qi=game.qIndex,r=game.results[qi],M=mainCount();
+  const last=qi===game.questions.length-1,toBonus=qi===M-1&&!last;
+  const msg=r.skipped?t('skippedMsg'):r.earned===10?t('perfect'):r.earned>=6?t('great'):r.earned>0?t('almost'):t('notThis');
+  const color=r.skipped?'var(--muted)':r.earned===10?'var(--ok)':r.earned===0?'var(--bad)':'var(--gold2)';
   $('#fb').innerHTML=`<div class="feedback">
     ${r.timeout?`<div style="color:var(--bad);font-weight:700;margin-bottom:6px">${t('timeUp')}</div>`:''}
     <div class="row" style="justify-content:space-between">
       <span class="big" style="color:${color}">${msg} +${t('pts',r.earned)}</span>
-      <span class="muted">${r.correct.map((c,i)=>`${i+1}: ${c?'✅':'❌'}`).join(' &nbsp; ')}</span>
+      ${r.skipped?'':`<span class="muted">${r.correct.map((c,i)=>`${i+1}: ${c?'✅':'❌'}`).join(' &nbsp; ')}</span>`}
     </div>
     <div class="exp"><b>${t('explain')}</b> ${esc(tx(r.explain))}</div>
     <div class="row" style="justify-content:flex-start;margin-top:14px">
-      <button class="btn" id="nextBtn">${last?t('toResults'):t('nextQ')}</button>
+      <button class="btn ${toBonus?'violet':''}" id="nextBtn">${last?t('toResults'):toBonus?t('toBonus'):t('nextQ')}</button>
     </div></div>`;
   $('#nextBtn').onclick=next;
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
 }
 function next(){
-  if(game.qIndex<game.questions.length-1){
-    game.qIndex++;game.answers=blankAnswers(game.questions[game.qIndex]);game.submitted=false;game.timedOut=false;game.qStart=Date.now();
-    save(KEY_CUR,game);go('game');
-  }else finish();
+  const M=mainCount();
+  if(game.qIndex===M-1&&game.questions.length>M){game.stage='bonusIntro';save(KEY_CUR,game);go('game')}
+  else if(game.qIndex<game.questions.length-1) advance();
+  else finish();
+}
+function advance(){
+  game.qIndex++;game.answers=blankAnswers(game.questions[game.qIndex]);
+  game.submitted=false;game.timedOut=false;game.skipping=false;game.qStart=Date.now();
+  save(KEY_CUR,game);go('game');
 }
 
 /* ---------- 5. סיום (השרת כבר שמר את התוצאה בטבלה) ---------- */
 function finish(){
-  lastFinished={id:game.id,team:game.team,school:game.school,score:game.score,per:game.results.map(r=>r.earned)};
+  const M=mainCount(),earned=i=>game.results[i]?game.results[i].earned:null;
+  const per=game.questions.slice(0,M).map((_,i)=>earned(i)),bonusPer=game.questions.slice(M).map((_,j)=>earned(M+j));
+  lastFinished={id:game.id,team:game.team,school:game.school,score:game.score,main:sum(per),bonus:sum(bonusPer),per,bonusPer};
   game=null;del(KEY_CUR);
   go('result');
+}
+// One square per question: the main questions, then the bonus ones (null = bonus question not reached).
+function perSquares(per,bonusPer,tag,cls){
+  return per.map((e,i)=>`<${tag} class="${cls} ${qScoreClass(e)}" title="${t('pts',e)}">${tag==='div'?i+1:''}</${tag}>`).join('')+
+    (bonusPer||[]).map((e,i)=>`<${tag} class="${cls} bonus ${qScoreClass(e)}" title="${t('bonusLbl')} ${i+1}: ${e==null?'—':t('pts',e)}">${tag==='div'?'★':''}</${tag}>`).join('');
 }
 function renderResult(app){
   const r=lastFinished;
   if(!r){go('board');return}
-  const title=r.score>=90?t('champ'):r.score>=70?t('excellent'):r.score>=40?t('effort'):t('thanks');
+  const title=r.main>=90?t('champ'):r.main>=70?t('excellent'):r.main>=40?t('effort'):t('thanks');
+  const ptsText=r.bonus?t('ptsBreak',r.main,r.bonus):t('ptsOf100');
   app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap" style="max-width:820px"><div class="card" style="text-align:center">
     <div style="color:var(--sea);font-weight:500">${esc(r.team)} · ${esc(r.school)}</div>
     <h1 style="margin-top:8px">${title}</h1>
     <div class="final-score" id="fs">0</div>
-    <div class="muted" style="font-size:20px" id="rtime">${t('ptsOf100')}</div>
+    <div class="muted" style="font-size:20px" id="rtime">${ptsText}</div>
     <div style="font-size:22px;margin:16px 0;min-height:40px" id="rank">${t('calcRank')}</div>
-    <div class="dots" style="justify-content:center;margin:14px 0 24px">${r.per.map((e,i)=>`<div class="dot ${qScoreClass(e)}" title="${t('pts',e)}">${i+1}</div>`).join('')}</div>
+    <div class="dots" style="justify-content:center;margin:14px 0 24px">${perSquares(r.per,r.bonusPer,'div','dot')}</div>
     <div class="row" style="justify-content:center">
       <button class="btn sea" onclick="go('board')">${t('toBoard')}</button>
       <button class="btn" onclick="go('home')">${t('toHome')}</button>
     </div></div></div></div>`;
   let n=0;const el=$('#fs');const timer=setInterval(()=>{n=Math.min(r.score,n+2);el.textContent=n;if(n>=r.score)clearInterval(timer)},25);
-  sfx.win();if(r.score>=50) confetti();
+  sfx.win();if(r.main>=50) confetti();
   fetchBoard().then(board=>{
     const idx=board.findIndex(x=>x.id===r.id);if(idx<0||screen!=='result')return;
     $('#rank').innerHTML=t('rank',idx+1,board.length);
-    $('#rtime').textContent=t('ptsOf100')+t('totalTime',fmtTime(board[idx].time));
+    $('#rtime').textContent=ptsText+t('totalTime',fmtTime(board[idx].time));
   }).catch(()=>{const el=$('#rank');if(el)el.textContent=t('saved')});
 }
 
@@ -490,8 +537,8 @@ function boardHTML(board){
       <tbody>${board.map((r,i)=>`<tr class="${r.id===meId?'me':''}">
         <td>${medal[i]||i+1}</td>
         <td><b>${esc(r.team)}</b>${r.offline?` <span class="muted" title="${t('importedTip')}">📴</span>`:''}${r.members?`<div class="muted" style="font-size:13px">${esc(r.members)}</div>`:''}</td>
-        <td>${esc(r.school)}</td><td class="sc">${r.score}</td><td style="direction:ltr;text-align:right">${fmtTime(r.time)}</td>
-        <td><div class="mini">${r.per.map(e=>`<i class="${qScoreClass(e)}" title="${e}"></i>`).join('')}</div></td>
+        <td>${esc(r.school)}</td><td class="sc">${r.score}${r.bonus?`<div class="sc-break">${rowMain(r)} + ${r.bonus}★</div>`:''}</td><td style="direction:ltr;text-align:right">${fmtTime(r.time)}</td>
+        <td><div class="mini">${perSquares(r.per,r.bonusPer,'i','')}</div></td>
         <td class="muted" style="font-size:13px;white-space:nowrap">${fmtDate(r.date)}
           ${adminPass?`<button class="icon-btn" style="margin-right:8px" title="${t('deleteTip')}" data-id="${esc(r.id)}" data-team="${esc(r.team)}" onclick="deleteRow(this.dataset.id,this.dataset.team)">🗑</button>`:''}</td></tr>`).join('')}</tbody>
     </table></div>`;
@@ -532,8 +579,10 @@ function download(name,content,type){
 async function exportCSV(){
   try{
     const board=await fetchBoard(),h=t('csv');
-    const rows=[[...h.slice(0,6),...KINDS.map((_,i)=>h[6].replace('{0}',i+1)),h[7],h[8]]];
-    board.forEach((r,i)=>rows.push([i+1,r.team,r.school,r.members||'',r.score,r.time,...r.per,r.lang==='cs'?'C#':'Java',fmtDate(r.date)]));
+    const B=t('bonusLbl'),nB=Math.max(0,...board.map(r=>(r.bonusPer||[]).length));
+    const rows=[[...h.slice(0,6),...KINDS.map((_,i)=>h[6].replace('{0}',i+1)),B,...Array.from({length:nB},(_,i)=>B+' '+(i+1)),h[7],h[8]]];
+    board.forEach((r,i)=>rows.push([i+1,r.team,r.school,r.members||'',r.score,r.time,...r.per,r.bonus||0,
+      ...Array.from({length:nB},(_,j)=>(r.bonusPer||[])[j]??''),r.lang==='cs'?'C#':'Java',fmtDate(r.date)]));
     const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
     download('akko-cs-results.csv',csv,'text/csv;charset=utf-8');
   }catch(e){errModal(e)}

@@ -29,11 +29,15 @@ export default route('POST', async (req, res) => {
       let added = 0;
       for (const r of Array.isArray(b.records) ? b.records : []) {
         if (!r || !r.id || typeof r.score !== 'number' || !Array.isArray(r.per)) continue;
+        const pts = n => Math.max(0, Math.min(10, Math.round(Number(n) || 0)));
+        const per = r.per.slice(0, 10).map(pts);
+        const bonusPer = (Array.isArray(r.bonusPer) ? r.bonusPer : []).slice(0, 10).map(n => (n == null ? null : pts(n)));
+        const bonus = bonusPer.reduce((s, e) => s + (e || 0), 0);
         const rec = {
           id: clean(r.id, 64), team: clean(r.team, 40), school: clean(r.school, 60), members: clean(r.members, 120),
-          lang: r.lang === 'cs' ? 'cs' : 'java', score: Math.max(0, Math.min(100, Math.round(r.score))),
+          lang: r.lang === 'cs' ? 'cs' : 'java', score: per.reduce((s, e) => s + e, 0) + bonus,
           time: Math.max(0, Math.round(Number(r.time) || 0)), date: Number(r.date) || Date.now(),
-          per: r.per.slice(0, 10).map(n => Math.max(0, Math.min(10, Math.round(Number(n) || 0)))), offline: true
+          per, bonus, bonusPer, offline: true
         };
         added += await redis('HSETNX', KEY_BOARD, rec.id, JSON.stringify(rec));
       }

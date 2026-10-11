@@ -3,8 +3,10 @@
 param([string]$Out = (Join-Path $PSScriptRoot '..\akko-cs-challenge.html'))
 
 $read = { param($p) [IO.File]::ReadAllText((Join-Path $PSScriptRoot $p), [Text.Encoding]::UTF8) }
+# Module syntax is stripped: the files are inlined as plain scripts, bonus.js before questions.js which uses it.
+$module    = { param($p) (& $read $p) -replace '(?m)^import\s.*$', '' -replace '(?m)^export\s+', '' }
 $html      = & $read 'public\index.html'
-$questions = (& $read 'lib\questions.js') -replace '(?m)^export\s+', ''
+$questions = (& $module 'lib\bonus.js') + "`n" + (& $module 'lib\questions.js')
 $localApi  = & $read 'offline\local-api.js'
 $i18n      = & $read 'public\i18n.js'
 $app       = & $read 'public\app.js'
