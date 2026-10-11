@@ -335,6 +335,7 @@ function renderGame(app){
       <h2 style="margin:0">${inBonus?t('bonusQ',qi-M+1):t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
       <span class="badge ${q.kind}">${t('kind')[q.kind]}</span>
       <span class="muted">${q.code?esc(tx(q.title))+' · ':''}${t('pts',10)}${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' '+t('minutes'):''}</span>
+      ${inBonus?`<button class="btn sm ghost" style="margin-inline-start:auto" onclick="finishEarly()">${t('finishNow')}</button>`:''}
     </div>
     <div class="qgrid">
       <div>${q.code?codeColumn(q,L):promptColumn(q)}</div>
@@ -435,6 +436,12 @@ function showFeedback(scroll){
   if(toBonus){$('#bonusBtn').onclick=()=>{sfx.click();advance()};$('#finishBtn').onclick=finish}
   else $('#nextBtn').onclick=next;
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
+}
+// Ends the game in the middle of the bonus (each school has limited time). The leaderboard row already
+// holds the main score plus the bonus answered so far; the remaining bonus questions count as 0.
+async function finishEarly(){
+  if(submitting) return;
+  if(await modal(t('finishTitle'),t('finishBody',game.score),t('finishYes'),t('cancel'))) finish();
 }
 function next(){
   if(game.qIndex<game.questions.length-1) advance();
