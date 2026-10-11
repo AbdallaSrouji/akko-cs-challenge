@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>אתגר הקוד של עכו</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#06111f; --bg2:#0b2140; --card:#0f2747; --card2:#13325a; --line:#22497a;
@@ -16,7 +16,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%}
 body{
-  font-family:"Rubik",system-ui,"Segoe UI",Arial,sans-serif;color:var(--text);
+  font-family:"Rubik","Noto Sans Arabic",system-ui,"Segoe UI",Arial,sans-serif;color:var(--text);
   background:radial-gradient(1200px 700px at 80% -10%,#15407a 0%,transparent 60%),
              radial-gradient(900px 600px at 0% 110%,#0d4d63 0%,transparent 55%),var(--bg);
   background-attachment:fixed;overflow-x:hidden;
@@ -181,6 +181,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:40}
 .offline{color:#ffb4bb;background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.4);border-radius:12px;padding:10px 14px;line-height:1.5}
 .live{font-size:14px;color:var(--ok);vertical-align:middle;animation:pulse 2s infinite}
 .modal .in{margin-top:6px}
+.lang-btn{font-family:inherit;font-weight:700;font-size:15px;padding:8px 14px}
 .badge.gen{color:#8fd3ff;border-color:rgba(143,211,255,.5);background:rgba(143,211,255,.1)}
 .badge.think{color:var(--gold2);border-color:rgba(245,185,66,.6);background:rgba(245,185,66,.12)}
 .prompt{border-radius:18px;padding:24px 26px;border:1px solid var(--line);background:linear-gradient(160deg,#143a68,#0c2442);position:relative;overflow:hidden}
@@ -196,6 +197,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:40}
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

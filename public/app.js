@@ -1,13 +1,12 @@
 /* =========================================================
-   אתגר הקוד של עכו — גרסה מקוונת.
+   אתגר הקוד של עכו / تحدّي البرمجة في عكا
    השאלות, התשובות והניקוד נמצאים בשרת (תיקיית api/),
    כך שהתשובות הנכונות אינן חשופות בקוד הדף.
+   טקסט הממשק נמצא ב-i18n.js (עברית / ערבית).
    ========================================================= */
 const KINDS = ['gen','gen','gen','rec','loop','prog','rec','think','think','think'];
-const KIND_LABEL = {gen:'מדעי המחשב · כללי', loop:'קוד · לולאה ומחרוזת', prog:'קוד · תוכנית ומערך', rec:'קוד · רקורסיה ומערך', think:'אתגר חשיבה'};
 const KIND_TIME = {gen:120, loop:300, prog:300, rec:300, think:300};
 const OFFLINE = typeof LOCAL_API !== 'undefined';
-const LETTERS = ['א','ב','ג','ד'];
 
 /* ---------- אחסון מקומי (משחק פתוח והגדרות של המחשב הזה) ---------- */
 const KEY_CUR=OFFLINE?'akkoCS_offline_current_v2':'akkoCS_online_current_v2', KEY_SET='akkoCS_settings_v2';
@@ -15,12 +14,33 @@ const mem={};
 function load(k,def){let v=null;try{v=localStorage.getItem(k)}catch(e){}if(v==null)v=mem[k];try{return v?JSON.parse(v):def}catch(e){return def}}
 function save(k,v){const s=JSON.stringify(v);mem[k]=s;try{localStorage.setItem(k,s)}catch(e){}}
 function del(k){delete mem[k];try{localStorage.removeItem(k)}catch(e){}}
-let settings = Object.assign({timerOn:true, sound:true, lang:'java'}, load(KEY_SET,{}));
+let settings = Object.assign({timerOn:true, sound:true, lang:'java', ui:'he'}, load(KEY_SET,{}));
 let game = load(KEY_CUR,null);
 let screen = 'home';
 let tickHandle = null;
 let adminPass = null;
 let lastFinished = null;
+
+/* ---------- שפה ---------- */
+// t('key', a, b) -> interface text in the current language with {0},{1} filled in.
+function t(key,...args){
+  const v=(I18N[settings.ui]||I18N.he)[key]??I18N.he[key]??key;
+  return typeof v==='string'?v.replace(/\{(\d)\}/g,(_,i)=>args[i]):v;
+}
+// Question content is either a plain string (code / numbers) or {he, ar}.
+const tx=v=>v==null?'':typeof v==='string'?v:(v[settings.ui]||v.he);
+// The language-neutral form sent to the server when answering.
+const canon=v=>typeof v==='string'?v:v.he;
+function applyLang(){
+  document.documentElement.lang=settings.ui;
+  document.documentElement.dir='rtl';
+  document.title=t('title');
+}
+function toggleUI(){
+  settings.ui=settings.ui==='he'?'ar':'he';save(KEY_SET,settings);applyLang();
+  if(screen==='game'){clearInterval(tickHandle)}
+  render();
+}
 
 /* ---------- שרת ---------- */
 async function api(path,data){
@@ -28,9 +48,9 @@ async function api(path,data){
   let r;
   try{
     r=await fetch('/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{cache:'no-store'});
-  }catch(e){throw new Error('אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.')}
+  }catch(e){throw new Error(t('noConn'))}
   let j={};try{j=await r.json()}catch(e){}
-  if(!r.ok) throw new Error(j.error||('שגיאת שרת ('+r.status+')'));
+  if(!r.ok) throw new Error(j.error||t('serverErr',r.status));
   return j;
 }
 async function fetchBoard(){return (await api('scores')).board}
@@ -39,7 +59,7 @@ async function fetchBoard(){return (await api('scores')).board}
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function fmtTime(sec){sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;return m+':'+String(s).padStart(2,'0')}
-function fmtDate(ts){const d=new Date(ts);return d.toLocaleDateString('he-IL')+' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}
+function fmtDate(ts){const d=new Date(ts),L=t('locale');return d.toLocaleDateString(L)+' '+d.toLocaleTimeString(L,{hour:'2-digit',minute:'2-digit'})}
 function toLang(src,lang){
   if(lang!=='cs') return src;
   return src.replace(/System\.out\.println/g,'Console.WriteLine')
@@ -53,9 +73,9 @@ function highlight(code){
   const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(\d+)\b|\b(public|static|int|void|return|if|else|while|for|new|boolean|bool|String|string|true|false)\b|\b([A-Za-z_]\w*)(?=\s*\()/gm;
   let out='',last=0,m;
   while((m=re.exec(code))){
-    out+=esc(code.slice(last,m.index));const t=esc(m[0]);
+    out+=esc(code.slice(last,m.index));const tok=esc(m[0]);
     const cls=m[1]?'c':m[2]?'s':m[3]?'n':m[4]?'k':'f';
-    out+=`<span class="tk-${cls}">${t}</span>`;last=re.lastIndex;
+    out+=`<span class="tk-${cls}">${tok}</span>`;last=re.lastIndex;
   }
   out+=esc(code.slice(last));
   return out.split('\n').map(l=>`<span class="ln">${l||' '}</span>`).join('');
@@ -69,14 +89,14 @@ function beep(freqs,dur=.12,type='sine'){
   try{
     actx=actx||new (window.AudioContext||window.webkitAudioContext)();
     freqs.forEach((f,i)=>{const o=actx.createOscillator(),g=actx.createGain();o.type=type;o.frequency.value=f;
-      const t=actx.currentTime+i*dur;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.18,t+.02);
-      g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g).connect(actx.destination);o.start(t);o.stop(t+dur+.02)});
+      const st=actx.currentTime+i*dur;g.gain.setValueAtTime(.0001,st);g.gain.exponentialRampToValueAtTime(.18,st+.02);
+      g.gain.exponentialRampToValueAtTime(.0001,st+dur);o.connect(g).connect(actx.destination);o.start(st);o.stop(st+dur+.02)});
   }catch(e){}
 }
 const sfx={click:()=>beep([660],.06,'triangle'),good:()=>beep([523,659,784,1047],.11),bad:()=>beep([300,220],.18,'sawtooth'),win:()=>beep([523,659,784,1047,784,1047],.13)};
 
 /* ---------- מודאל ---------- */
-function modal(title,body,okText='אישור',cancelText='ביטול',danger=false,withInput=false){
+function modal(title,body,okText=t('ok'),cancelText=t('cancel'),danger=false,withInput=false){
   return new Promise(res=>{
     const bg=document.createElement('div');bg.className='modal-bg';
     bg.innerHTML=`<div class="card modal"><h2>${title}</h2><p class="muted" style="line-height:1.6">${body}</p>
@@ -94,6 +114,7 @@ function modal(title,body,okText='אישור',cancelText='ביטול',danger=fal
     bg.onclick=e=>{if(e.target===bg) done(withInput?null:false)};
   });
 }
+const errModal=e=>modal(t('error'),esc(e.message||e),t('close'),null);
 
 /* ---------- ניווט ---------- */
 function go(s){screen=s;clearInterval(tickHandle);render();window.scrollTo(0,0)}
@@ -101,10 +122,12 @@ function render(){
   const app=$('#app');
   ({home:renderHome,rules:renderRules,register:renderRegister,game:renderGame,result:renderResult,board:renderBoard})[screen](app);
 }
+const langBtn=()=>`<button class="icon-btn lang-btn" title="${t('switchLang')}" onclick="toggleUI()">${settings.ui==='he'?I18N.ar.langName:I18N.he.langName}</button>`;
 function cornerHTML(){
   return `<div class="corner">
-    <button class="icon-btn" title="מסך מלא" onclick="toggleFS()">⛶</button>
-    <button class="icon-btn" title="צלילים" onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
+    ${langBtn()}
+    <button class="icon-btn" title="${t('fullscreen')}" onclick="toggleFS()">⛶</button>
+    <button class="icon-btn" title="${t('sound')}" onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
   </div>`;
 }
 function toggleFS(){try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}catch(e){}}
@@ -129,75 +152,76 @@ function skylineSVG(){
     <path d="M0 176 q20 -6 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0" stroke="#7ae6f2" stroke-width="2" fill="none" opacity=".6"/>
   </svg>`;
 }
+function statsHTML(board){
+  const v=x=>board?x:'…';
+  const best=board?board.reduce((m,r)=>Math.max(m,r.score),0):0;
+  const schools=board?new Set(board.map(r=>r.school.trim())).size:0;
+  return `<div class="stat"><b>${v(board&&board.length)}</b>${t('statTeams')}</div>
+    <div class="stat"><b>${v(schools)}</b>${t('statSchools')}</div>
+    <div class="stat"><b>${v(best)}</b>${t('statBest')}</div>`;
+}
 function renderHome(app){
   app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap"><div class="hero" style="margin:0 auto">
-    <span class="kicker">יום שיא במדעי המחשב · תיכוני עכו</span>
+    <span class="kicker">${t('kicker')}</span>
     ${skylineSVG()}
-    <h1>אתגר הקוד של עכו</h1>
-    <div class="sub">10 שאלות · ידע במדעי המחשב, מעקב קוד ואתגרי חשיבה · 100 נקודות · צוות אחד יכבוש את החומות</div>
+    <h1>${t('title')}</h1>
+    <div class="sub">${t('sub')}</div>
     <div class="row">
-      <button class="btn" onclick="sfx.click();go('rules')">▶ התחילו לשחק</button>
-      <button class="btn sea" onclick="sfx.click();go('board')">🏆 טבלת המובילים</button>
+      <button class="btn" onclick="sfx.click();go('rules')">${t('play')}</button>
+      <button class="btn sea" onclick="sfx.click();go('board')">${t('board')}</button>
     </div>
-    ${game?`<div class="resume">יש משחק פתוח של הצוות <b>${esc(game.team)}</b> (${esc(game.school)}) — שאלה ${game.qIndex+1} מתוך 10.
+    ${game?`<div class="resume">${t('resume',esc(game.team),esc(game.school),game.qIndex+1)}
       <div class="row" style="justify-content:center;margin-top:10px">
-        <button class="btn sm" onclick="go('game')">המשך משחק</button>
-        <button class="btn sm ghost" onclick="abandon()">בטל משחק זה</button></div></div>`:''}
-    <div class="stats" id="stats">
-      <div class="stat"><b>…</b>צוותים שיחקו</div>
-      <div class="stat"><b>…</b>בתי ספר</div>
-      <div class="stat"><b>…</b>שיא נקודות</div>
-    </div>
+        <button class="btn sm" onclick="go('game')">${t('resumeBtn')}</button>
+        <button class="btn sm ghost" onclick="abandon()">${t('abandonBtn')}</button></div></div>`:''}
+    <div class="stats" id="stats">${statsHTML(null)}</div>
   </div></div></div>`;
   fetchBoard().then(board=>{
-    const el=$('#stats');if(!el||screen!=='home')return;
-    const best=board.reduce((m,r)=>Math.max(m,r.score),0);
-    const schools=new Set(board.map(r=>r.school.trim())).size;
-    el.innerHTML=`<div class="stat"><b>${board.length}</b>צוותים שיחקו</div><div class="stat"><b>${schools}</b>בתי ספר</div><div class="stat"><b>${best}</b>שיא נקודות</div>`;
+    const el=$('#stats');if(el&&screen==='home')el.innerHTML=statsHTML(board);
   }).catch(e=>{
-    const el=$('#stats');if(el)el.innerHTML=`<div class="offline">⚠️ ${esc(e.message)} אם אין רשת באולם — השתמשו בגרסה המקומית שבמחשב.</div>`;
+    const el=$('#stats');if(el)el.innerHTML=`<div class="offline">⚠️ ${esc(e.message)} ${t('offlineHint')}</div>`;
   });
 }
 async function abandon(){
-  if(await modal('ביטול משחק','המשחק הפתוח יבוטל במחשב הזה והתוצאה לא תיכנס לטבלה. להמשיך?','כן, בטל','חזרה',true)){
+  if(await modal(t('abandonTitle'),t('abandonBody'),t('yesCancel'),t('back'),true)){
     game=null;del(KEY_CUR);render();
   }
 }
 
 /* ---------- 2. הנחיות ---------- */
 function renderRules(app){
+  const tm=k=>settings.timerOn?t(k):'';
   app.innerHTML=cornerHTML()+`<div class="wrap" style="padding-top:60px"><div class="card">
-    <h1>📜 הנחיות לפעילות</h1>
-    <p class="muted" style="font-size:18px;line-height:1.7">כל צוות מקבל 10 שאלות בשלושה שלבים, 10 נקודות לכל שאלה — 100 נקודות בסך הכל. בשאלות הקוד שימו לב: <b style="color:var(--gold2)">שמות הפעולות אינם מרמזים על תפקידן</b> — עליכם לעקוב אחר הקוד בעצמכם!</p>
+    <h1>${t('rulesTitle')}</h1>
+    <p class="muted" style="font-size:18px;line-height:1.7">${t('rulesIntro')}</p>
     <div class="steps">
-      <div class="step"><div class="num">1–3</div><h3>🧠 מדעי המחשב — כללי</h3><div class="muted">3 שאלות ידע וחשיבה: ייצוג מידע, יעילות ומבני נתונים. ${settings.timerOn?'2 דקות לשאלה.':''}</div></div>
-      <div class="step"><div class="num">4–7</div><h3>💻 שאלות קוד</h3><div class="muted">4 שאלות מעקב: רקורסיה, לולאות, מערכים ומחרוזות. לכל שאלה 3 סעיפים — מה יודפס, מה יוחזר ומה התפקיד. ${settings.timerOn?'5 דקות לשאלה.':''}</div></div>
-      <div class="step"><div class="num">8–10</div><h3>🏰 אתגרי חשיבה</h3><div class="muted">3 חידות אלגוריתמיות לסיום — חשבו לפני שאתם עונים! ${settings.timerOn?'5 דקות לשאלה.':''}</div></div>
-      <div class="step"><div class="num">✔</div><h3>הגישו ולמדו</h3><div class="muted">לאחר ההגשה תראו מה צדקתם, את הניקוד ואת הסבר הפתרון. אין חזרה לשאלה קודמת.</div></div>
+      <div class="step"><div class="num">1–3</div><h3>${t('stage1Title')}</h3><div class="muted">${t('stage1Body')} ${tm('min2')}</div></div>
+      <div class="step"><div class="num">4–7</div><h3>${t('stage2Title')}</h3><div class="muted">${t('stage2Body')} ${tm('min5')}</div></div>
+      <div class="step"><div class="num">8–10</div><h3>${t('stage3Title')}</h3><div class="muted">${t('stage3Body')} ${tm('min5')}</div></div>
+      <div class="step"><div class="num">✔</div><h3>${t('stage4Title')}</h3><div class="muted">${t('stage4Body')}</div></div>
     </div>
     <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
-      <div class="step"><h3>🎯 ניקוד</h3>
+      <div class="step"><h3>${t('scoringTitle')}</h3>
         <table class="pts-table">
-          <tr><td>שאלה כללית / אתגר — תשובה נכונה</td><td>10 נק'</td></tr>
-          <tr><td>שאלת קוד — מה יודפס</td><td>3 נק'</td></tr>
-          <tr><td>שאלת קוד — מה יוחזר / ערך המשתנה</td><td>3 נק'</td></tr>
-          <tr><td>שאלת קוד — מה תפקיד הקוד</td><td>4 נק'</td></tr>
-          <tr><td><b>סה"כ במשחק</b></td><td>100 נק'</td></tr>
+          <tr><td>${t('sc1')}</td><td>${t('pts',10)}</td></tr>
+          <tr><td>${t('sc2')}</td><td>${t('pts',3)}</td></tr>
+          <tr><td>${t('sc3')}</td><td>${t('pts',3)}</td></tr>
+          <tr><td>${t('sc4')}</td><td>${t('pts',4)}</td></tr>
+          <tr><td><b>${t('total')}</b></td><td>${t('pts',100)}</td></tr>
         </table></div>
-      <div class="step"><h3>⏱️ זמן ושוויון</h3>
-        <div class="muted" style="line-height:1.7">${settings.timerOn?'לכל שאלה מוגבל זמן (מוצג בראש המסך). כשהזמן נגמר — התשובות שסומנו מוגשות אוטומטית.':'הגבלת הזמן כבויה.'}
-        הניקוד שלכם מוצג כל הזמן בראש המסך. במקרה של שוויון בנקודות — מנצח הצוות שסיים בזמן הקצר יותר.</div>
-        <label class="f">הגבלת זמן (למארגנים):</label>
+      <div class="step"><h3>${t('timeTitle')}</h3>
+        <div class="muted" style="line-height:1.7">${settings.timerOn?t('timeOn'):t('timeOff')} ${t('tieRule')}</div>
+        <label class="f">${t('timerLabel')}</label>
         <div class="seg">
-          <button class="${settings.timerOn?'on':''}" onclick="settings.timerOn=true;save(KEY_SET,settings);render()">פעילה</button>
-          <button class="${settings.timerOn?'':'on'}" onclick="settings.timerOn=false;save(KEY_SET,settings);render()">כבויה</button>
+          <button class="${settings.timerOn?'on':''}" onclick="settings.timerOn=true;save(KEY_SET,settings);render()">${t('timerActive')}</button>
+          <button class="${settings.timerOn?'':'on'}" onclick="settings.timerOn=false;save(KEY_SET,settings);render()">${t('timerOff')}</button>
         </div></div>
-      <div class="step"><h3>🗺️ מפת השאלות</h3>
-        <div class="qmap">${KINDS.map((k,i)=>`<div><b>${i+1}.</b> ${KIND_LABEL[k]}</div>`).join('')}</div></div>
+      <div class="step"><h3>${t('mapTitle')}</h3>
+        <div class="qmap">${KINDS.map((k,i)=>`<div><b>${i+1}.</b> ${t('kind')[k]}</div>`).join('')}</div></div>
     </div>
     <div class="row" style="justify-content:space-between;margin-top:10px">
-      <button class="btn ghost" onclick="go('home')">→ חזרה</button>
-      <button class="btn" onclick="sfx.click();go('register')">הבנו, ממשיכים ←</button>
+      <button class="btn ghost" onclick="go('home')">${t('backArrow')}</button>
+      <button class="btn" onclick="sfx.click();go('register')">${t('understood')}</button>
     </div>
   </div></div>`;
 }
@@ -208,24 +232,24 @@ function renderRegister(app){
   let lang=settings.lang;
   app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap" style="display:flex;justify-content:center">
     <div class="card form">
-      <h1>👥 רישום הצוות</h1>
-      <div class="muted">הפרטים יישמרו בטבלת המובילים המשותפת בסיום המשחק.</div>
-      <label class="f" for="team">שם הצוות *</label>
-      <input class="in" id="team" maxlength="40" placeholder="למשל: אבירי הלולאה" autocomplete="off">
-      <label class="f" for="school">בית הספר *</label>
-      <input class="in" id="school" maxlength="60" placeholder="למשל: תיכון עכו" autocomplete="off" list="schools">
+      <h1>${t('regTitle')}</h1>
+      <div class="muted">${t('regSub')}</div>
+      <label class="f" for="team">${t('team')}</label>
+      <input class="in" id="team" maxlength="40" placeholder="${t('teamPh')}" autocomplete="off">
+      <label class="f" for="school">${t('school')}</label>
+      <input class="in" id="school" maxlength="60" placeholder="${t('schoolPh')}" autocomplete="off" list="schools">
       <datalist id="schools"></datalist>
-      <label class="f" for="members">שמות חברי הצוות (לא חובה)</label>
-      <input class="in" id="members" maxlength="120" placeholder="דנה, עלי, נועם, מאיה" autocomplete="off">
-      <label class="f">שפת התכנות להצגת הקוד</label>
+      <label class="f" for="members">${t('members')}</label>
+      <input class="in" id="members" maxlength="120" placeholder="${t('membersPh')}" autocomplete="off">
+      <label class="f">${t('codeLang')}</label>
       <div class="seg" id="seg">
         <button data-l="java" class="${lang==='java'?'on':''}">Java</button>
         <button data-l="cs" class="${lang==='cs'?'on':''}">C#</button>
       </div>
       <div class="err" id="err"></div>
       <div class="row" style="justify-content:space-between;margin-top:8px">
-        <button class="btn ghost" onclick="go('rules')">→ חזרה</button>
-        <button class="btn" id="startBtn">🚀 התחל את האתגר</button>
+        <button class="btn ghost" onclick="go('rules')">${t('backArrow')}</button>
+        <button class="btn" id="startBtn">${t('startBtn')}</button>
       </div>
     </div></div></div>`;
   fetchBoard().then(b=>{const dl=$('#schools');if(dl)dl.innerHTML=[...new Set(b.map(r=>r.school))].map(s=>`<option value="${esc(s)}">`).join('')}).catch(()=>{});
@@ -236,8 +260,8 @@ function renderRegister(app){
   const start=async()=>{
     if(busy) return;
     const team=$('#team').value.trim(),school=$('#school').value.trim(),members=$('#members').value.trim();
-    if(!team||!school){$('#err').textContent='יש למלא שם צוות ושם בית ספר.';sfx.bad();return}
-    busy=true;const btn=$('#startBtn');btn.disabled=true;btn.textContent='⏳ מתחבר לשרת...';$('#err').textContent='';
+    if(!team||!school){$('#err').textContent=t('needNames');sfx.bad();return}
+    busy=true;const btn=$('#startBtn');btn.disabled=true;btn.textContent=t('connecting');$('#err').textContent='';
     try{
       const r=await api('start',{team,school,members,lang});
       settings.lang=lang;save(KEY_SET,settings);
@@ -245,7 +269,7 @@ function renderRegister(app){
         results:[],answers:blankAnswers(r.questions[0]),qStart:Date.now(),submitted:false};
       save(KEY_CUR,game);sfx.win();go('game');
     }catch(e){
-      $('#err').textContent=e.message;sfx.bad();btn.disabled=false;btn.textContent='🚀 התחל את האתגר';busy=false;
+      $('#err').textContent=e.message;sfx.bad();btn.disabled=false;btn.textContent=t('startBtn');busy=false;
     }
   };
   $('#startBtn').onclick=start;
@@ -263,19 +287,19 @@ function codeColumn(q,L){
       <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${fileName}</span></div>
       <pre class="code">${highlight(code)}</pre>
     </div>
-    ${call?`<div class="callbox"><h4>📞 הקריאה לפעולה</h4><pre>${highlight(call)}</pre>
-      <div class="muted" style="margin-bottom:6px;font-size:14px">ערכי הפרמטרים בקריאה הראשונה:</div>
+    ${call?`<div class="callbox"><h4>${t('callTitle')}</h4><pre>${highlight(call)}</pre>
+      <div class="muted" style="margin-bottom:6px;font-size:14px">${t('paramsNote')}</div>
       <div class="params">${q.params.map(([n,v])=>`<span class="param"><b>${n}</b> = ${esc(v)}</span>`).join('')}</div></div>`
-    :`<div class="callbox"><h4>▶ הרצה</h4><div class="muted">התוכנית הראשית מורצת פעם אחת. עקבו אחר ערכי המשתנים בכל סיבוב של הלולאה.</div></div>`}`;
+    :`<div class="callbox"><h4>${t('runTitle')}</h4><div class="muted">${t('runNote')}</div></div>`}`;
 }
 function promptColumn(q){
   const icon=q.kind==='think'?'🏰':'🧠';
-  return `<div class="prompt ${q.kind}"><div class="picon">${icon}</div><h3>${esc(q.title)}</h3>
-    ${q.prompt.split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>`;
+  return `<div class="prompt ${q.kind}"><div class="picon">${icon}</div><h3>${esc(tx(q.title))}</h3>
+    ${tx(q.prompt).split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>`;
 }
 function renderGame(app){
   if(!game){go('home');return}
-  const qi=game.qIndex,q=game.questions[qi],L=game.lang;
+  const qi=game.qIndex,q=game.questions[qi],L=game.lang,letters=t('letters');
   const dots=game.questions.map((_,i)=>{
     const r=game.results[i];const cls=r?qScoreClass(r.earned):(i===qi?'cur':'');
     return `<div class="dot ${cls}">${i+1}</div>`}).join('');
@@ -285,24 +309,25 @@ function renderGame(app){
     <div class="dots">${dots}</div>
     <div class="row">
       ${timeLimit(q)?`<div class="timer" id="timer">--:--</div>`:''}
-      <div class="score-box"><span class="lbl">ניקוד</span><span class="val" id="score">${game.score}</span><span class="lbl">/100</span></div>
-      <button class="icon-btn" title="צלילים" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
-      <button class="icon-btn" title="מסך מלא" onclick="toggleFS()">⛶</button>
-      <button class="icon-btn" title="יציאה לדף הבית (המשחק נשמר)" onclick="go('home')">🏠</button>
+      <div class="score-box"><span class="lbl">${t('score')}</span><span class="val" id="score">${game.score}</span><span class="lbl">/100</span></div>
+      ${langBtn()}
+      <button class="icon-btn" title="${t('sound')}" data-snd onclick="toggleSound()">${settings.sound?'🔊':'🔇'}</button>
+      <button class="icon-btn" title="${t('fullscreen')}" onclick="toggleFS()">⛶</button>
+      <button class="icon-btn" title="${t('homeTip')}" onclick="go('home')">🏠</button>
     </div>
   </div></div>
   <div class="wrap">
     <div class="qhead">
-      <h2 style="margin:0">שאלה ${qi+1} <span class="muted" style="font-weight:400">מתוך 10</span></h2>
-      <span class="badge ${q.kind}">${KIND_LABEL[q.kind]}</span>
-      <span class="muted">${q.code?esc(q.title)+' · ':''}10 נק'${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' דק\'':''}</span>
+      <h2 style="margin:0">${t('question',qi+1)} <span class="muted" style="font-weight:400">${t('of10')}</span></h2>
+      <span class="badge ${q.kind}">${t('kind')[q.kind]}</span>
+      <span class="muted">${q.code?esc(tx(q.title))+' · ':''}${t('pts',10)}${timeLimit(q)?' · '+fmtTime(timeLimit(q))+' '+t('minutes'):''}</span>
     </div>
     <div class="qgrid">
       <div>${q.code?codeColumn(q,L):promptColumn(q)}</div>
       <div id="parts">
-        ${q.parts.map((p,pi)=>`<div class="part"><h4><span>${q.parts.length>1?(pi+1)+'. ':''}${p.q}</span><small>${p.pts} נק'</small></h4>
-          <div class="opts">${p.o.map((txt,oi)=>`<button class="opt" data-p="${pi}" data-o="${oi}">
-            <span class="let">${LETTERS[oi]}</span><span class="txt ${p.mono?'mono':''}">${esc(p.mono?toLang(txt,L):txt)}</span></button>`).join('')}</div></div>`).join('')}
+        ${q.parts.map((p,pi)=>`<div class="part"><h4><span>${q.parts.length>1?(pi+1)+'. ':''}${esc(tx(p.q))}</span><small>${t('pts',p.pts)}</small></h4>
+          <div class="opts">${p.o.map((opt,oi)=>`<button class="opt" data-p="${pi}" data-o="${oi}">
+            <span class="let">${letters[oi]}</span><span class="txt ${p.mono?'mono':''}">${esc(p.mono?toLang(tx(opt),L):tx(opt))}</span></button>`).join('')}</div></div>`).join('')}
         <div class="submit-row" id="submitRow"></div>
         <div id="fb"></div>
       </div>
@@ -321,17 +346,17 @@ function paintAnswers(errMsg){
   document.querySelectorAll('.opt').forEach(b=>{
     const p=+b.dataset.p,o=+b.dataset.o,chosen=game.answers[p]===o;
     b.classList.remove('sel','right','wrong');b.disabled=game.submitted||submitting;
-    if(game.submitted){if(q.parts[p].o[o]===r.right[p])b.classList.add('right');else if(chosen)b.classList.add('wrong')}
+    if(game.submitted){if(canon(q.parts[p].o[o])===canon(r.right[p]))b.classList.add('right');else if(chosen)b.classList.add('wrong')}
     else if(chosen)b.classList.add('sel');
   });
   const row=$('#submitRow');if(!row)return;
   if(game.submitted){row.innerHTML='';return}
   const n=game.answers.filter(a=>a!=null).length,N=q.parts.length;
   if(errMsg){
-    row.innerHTML=`<span class="offline" style="flex:1">⚠️ ${esc(errMsg)}</span><button class="btn" id="subBtn">🔄 נסו לשלוח שוב</button>`;
+    row.innerHTML=`<span class="offline" style="flex:1">⚠️ ${esc(errMsg)}</span><button class="btn" id="subBtn">${t('retry')}</button>`;
   }else{
-    row.innerHTML=`<span class="muted">${N>1?`נבחרו ${n} מתוך ${N} סעיפים`:(n?'נבחרה תשובה':'בחרו תשובה')}</span>
-      <button class="btn" id="subBtn" ${n<N||submitting?'disabled':''}>${submitting?'⏳ שולח...':'✔ הגש תשובה'}</button>`;
+    row.innerHTML=`<span class="muted">${N>1?t('selectedN',n,N):(n?t('selected1'):t('choose'))}</span>
+      <button class="btn" id="subBtn" ${n<N||submitting?'disabled':''}>${submitting?t('sending'):t('submit')}</button>`;
   }
   $('#subBtn').onclick=()=>submit(game.timedOut);
 }
@@ -352,9 +377,9 @@ async function submit(timeout){
   if(timeout){game.timedOut=true;save(KEY_CUR,game)}
   submitting=true;paintAnswers();
   const qi=game.qIndex,q=game.questions[qi];
-  const texts=q.parts.map((p,i)=>game.answers[i]==null?null:p.o[game.answers[i]]);
+  const answers=q.parts.map((p,i)=>game.answers[i]==null?null:canon(p.o[game.answers[i]]));
   let r;
-  try{r=await api('answer',{id:game.id,q:qi,answers:texts})}
+  try{r=await api('answer',{id:game.id,q:qi,answers})}
   catch(e){submitting=false;paintAnswers(e.message);sfx.bad();return}
   submitting=false;
   game.results[qi]={earned:r.earned,correct:r.correct,right:r.right,explain:r.explain,timeout:!!game.timedOut};
@@ -367,17 +392,17 @@ async function submit(timeout){
 function showFeedback(scroll){
   const r=game.results[game.qIndex];
   const last=game.qIndex===game.questions.length-1;
-  const msg=r.earned===10?'🎉 מושלם!':r.earned>=6?'👏 יפה מאוד!':r.earned>0?'💪 כמעט...':'😬 לא הפעם';
+  const msg=r.earned===10?t('perfect'):r.earned>=6?t('great'):r.earned>0?t('almost'):t('notThis');
   const color=r.earned===10?'var(--ok)':r.earned===0?'var(--bad)':'var(--gold2)';
   $('#fb').innerHTML=`<div class="feedback">
-    ${r.timeout?`<div style="color:var(--bad);font-weight:700;margin-bottom:6px">⏰ הזמן נגמר — הוגשו התשובות שסומנו.</div>`:''}
+    ${r.timeout?`<div style="color:var(--bad);font-weight:700;margin-bottom:6px">${t('timeUp')}</div>`:''}
     <div class="row" style="justify-content:space-between">
-      <span class="big" style="color:${color}">${msg} +${r.earned} נק'</span>
+      <span class="big" style="color:${color}">${msg} +${t('pts',r.earned)}</span>
       <span class="muted">${r.correct.map((c,i)=>`${i+1}: ${c?'✅':'❌'}`).join(' &nbsp; ')}</span>
     </div>
-    <div class="exp"><b>הסבר:</b> ${esc(r.explain)}</div>
+    <div class="exp"><b>${t('explain')}</b> ${esc(tx(r.explain))}</div>
     <div class="row" style="justify-content:flex-start;margin-top:14px">
-      <button class="btn" id="nextBtn">${last?'🏁 לסיכום התוצאות':'לשאלה הבאה ←'}</button>
+      <button class="btn" id="nextBtn">${last?t('toResults'):t('nextQ')}</button>
     </div></div>`;
   $('#nextBtn').onclick=next;
   if(scroll) $('#fb').scrollIntoView({behavior:'smooth',block:'center'});
@@ -398,25 +423,25 @@ function finish(){
 function renderResult(app){
   const r=lastFinished;
   if(!r){go('board');return}
-  const title=r.score>=90?'אלופי הקוד! 🏆':r.score>=70?'עבודה מצוינת! 🌟':r.score>=40?'כל הכבוד על המאמץ! 💪':'תודה שהשתתפתם! 🙌';
+  const title=r.score>=90?t('champ'):r.score>=70?t('excellent'):r.score>=40?t('effort'):t('thanks');
   app.innerHTML=cornerHTML()+`<div class="center"><div class="wrap" style="max-width:820px"><div class="card" style="text-align:center">
     <div style="color:var(--sea);font-weight:500">${esc(r.team)} · ${esc(r.school)}</div>
     <h1 style="margin-top:8px">${title}</h1>
     <div class="final-score" id="fs">0</div>
-    <div class="muted" style="font-size:20px" id="rtime">נקודות מתוך 100</div>
-    <div style="font-size:22px;margin:16px 0;min-height:40px" id="rank">⏳ מחשב את המיקום שלכם...</div>
-    <div class="dots" style="justify-content:center;margin:14px 0 24px">${r.per.map((e,i)=>`<div class="dot ${qScoreClass(e)}" title="${e} נק'">${i+1}</div>`).join('')}</div>
+    <div class="muted" style="font-size:20px" id="rtime">${t('ptsOf100')}</div>
+    <div style="font-size:22px;margin:16px 0;min-height:40px" id="rank">${t('calcRank')}</div>
+    <div class="dots" style="justify-content:center;margin:14px 0 24px">${r.per.map((e,i)=>`<div class="dot ${qScoreClass(e)}" title="${t('pts',e)}">${i+1}</div>`).join('')}</div>
     <div class="row" style="justify-content:center">
-      <button class="btn sea" onclick="go('board')">🏆 לטבלת המובילים</button>
-      <button class="btn" onclick="go('home')">🏠 לדף הפתיחה</button>
+      <button class="btn sea" onclick="go('board')">${t('toBoard')}</button>
+      <button class="btn" onclick="go('home')">${t('toHome')}</button>
     </div></div></div></div>`;
-  let n=0;const el=$('#fs');const t=setInterval(()=>{n=Math.min(r.score,n+2);el.textContent=n;if(n>=r.score)clearInterval(t)},25);
+  let n=0;const el=$('#fs');const timer=setInterval(()=>{n=Math.min(r.score,n+2);el.textContent=n;if(n>=r.score)clearInterval(timer)},25);
   sfx.win();if(r.score>=50) confetti();
   fetchBoard().then(board=>{
     const idx=board.findIndex(x=>x.id===r.id);if(idx<0||screen!=='result')return;
-    $('#rank').innerHTML=`מקום <b style="color:var(--gold2);font-size:32px">${idx+1}</b> מתוך ${board.length} צוותים`;
-    $('#rtime').textContent=`נקודות מתוך 100 · זמן כולל ${fmtTime(board[idx].time)}`;
-  }).catch(()=>{const el=$('#rank');if(el)el.textContent='התוצאה נשמרה בשרת.'});
+    $('#rank').innerHTML=t('rank',idx+1,board.length);
+    $('#rtime').textContent=t('ptsOf100')+t('totalTime',fmtTime(board[idx].time));
+  }).catch(()=>{const el=$('#rank');if(el)el.textContent=t('saved')});
 }
 
 /* ---------- 6. טבלת מובילים (מתעדכנת אוטומטית) ---------- */
@@ -424,27 +449,25 @@ let boardCache=null;
 function renderBoard(app){
   app.innerHTML=cornerHTML()+`<div class="wrap" style="padding-top:60px"><div class="card">
     <div class="row" style="justify-content:space-between">
-      <h1 style="margin:0">🏆 טבלת המובילים ${OFFLINE?'<span class="muted" style="font-size:14px">📴 גרסה מקומית</span>':'<span class="live">● חי</span>'}</h1>
+      <h1 style="margin:0">${t('board')} ${OFFLINE?`<span class="muted" style="font-size:14px">${t('localVer')}</span>`:`<span class="live">${t('live')}</span>`}</h1>
       <div class="row">
-        <button class="btn sm ghost" onclick="go('home')">🏠 דף הפתיחה</button>
-        <button class="btn sm" onclick="go('rules')">▶ צוות חדש</button>
+        <button class="btn sm ghost" onclick="go('home')">${t('homeBtn')}</button>
+        <button class="btn sm" onclick="go('rules')">${t('newTeam')}</button>
       </div>
     </div>
-    <div id="boardBody">${boardCache?boardHTML(boardCache):'<div class="empty">⏳ טוען תוצאות...</div>'}</div>
-    <details style="margin-top:24px" ${adminPass?'open':''}><summary class="muted" style="cursor:pointer">⚙️ כלי מארגנים</summary>
+    <div id="boardBody">${boardCache?boardHTML(boardCache):`<div class="empty">${t('loading')}</div>`}</div>
+    <details style="margin-top:24px" ${adminPass?'open':''}><summary class="muted" style="cursor:pointer">${t('adminTools')}</summary>
       <div class="row" style="margin-top:12px">
-        <button class="btn sm sea" onclick="exportCSV()">⬇ ייצוא ל-Excel ‏(CSV)</button>
-        <button class="btn sm ghost" onclick="exportJSON()">💾 גיבוי (JSON)</button>
+        <button class="btn sm sea" onclick="exportCSV()">${t('exportCsv')}</button>
+        <button class="btn sm ghost" onclick="exportJSON()">${t('backup')}</button>
         ${adminPass?`
-        <button class="btn sm ghost" onclick="$('#imp').click()">📂 ${OFFLINE?'ייבוא ומיזוג גיבוי':'ייבוא תוצאות מהגרסה המקומית'}</button>
+        <button class="btn sm ghost" onclick="$('#imp').click()">${OFFLINE?t('importMerge'):t('importLocal')}</button>
         <input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importJSON(this.files[0])">
-        <button class="btn sm danger" onclick="clearBoard()">🗑 ניקוי הטבלה</button>
-        <button class="btn sm ghost" onclick="adminPass=null;render()">🔒 יציאת מארגן</button>`
-        :`<button class="btn sm ghost" onclick="adminLogin()">🔑 כניסת מארגן</button>`}
+        <button class="btn sm danger" onclick="clearBoard()">${t('clearBoard')}</button>
+        <button class="btn sm ghost" onclick="adminPass=null;render()">${t('adminLogout')}</button>`
+        :`<button class="btn sm ghost" onclick="adminLogin()">${t('adminLogin')}</button>`}
       </div>
-      <p class="muted" style="font-size:14px;line-height:1.6">${OFFLINE
-        ?'גרסה מקומית: התוצאות נשמרות רק בדפדפן של המחשב הזה. כשהרשת חוזרת — ייצאו "גיבוי (JSON)" וייבאו אותו בטבלה המקוונת דרך כלי המארגנים.'
-        :'הטבלה משותפת לכל המחשבים ומתעדכנת אוטומטית כל 10 שניות. במצב מארגן אפשר למחוק תוצאה בודדת (🗑 בשורה), לנקות את הטבלה, ולייבא קובץ גיבוי שיוצא מהגרסה המקומית — למקרה שחלק מהצוותים שיחקו בלי רשת.'}</p>
+      <p class="muted" style="font-size:14px;line-height:1.6">${OFFLINE?t('noteOffline'):t('noteOnline')}</p>
     </details>
   </div></div>`;
   const refresh=()=>fetchBoard().then(b=>{boardCache=b;const el=$('#boardBody');if(el&&screen==='board')el.innerHTML=boardHTML(b)})
@@ -453,7 +476,7 @@ function renderBoard(app){
   tickHandle=setInterval(refresh,10000);
 }
 function boardHTML(board){
-  if(!board.length) return `<div class="empty"><div style="font-size:50px">🏁</div>עדיין אין תוצאות. היו הצוות הראשון!</div>`;
+  if(!board.length) return `<div class="empty"><div style="font-size:50px">🏁</div>${t('empty')}</div>`;
   const medal=['🥇','🥈','🥉'];
   const top=board.slice(0,3);
   const podOrder=[1,0,2].filter(i=>top[i]);
@@ -461,43 +484,43 @@ function boardHTML(board){
   const meId=lastFinished&&lastFinished.id;
   return `<div class="podium">${podOrder.map(i=>`<div class="pod">
       <div style="font-size:34px">${medal[i]}</div><div class="nm">${esc(top[i].team)}</div><div class="sch">${esc(top[i].school)}</div>
-      <div class="ps">${top[i].score} נק'</div><div class="blk" style="height:${heights[i]}px;background:${cols[i]}">${i+1}</div></div>`).join('')}</div>
+      <div class="ps">${t('pts',top[i].score)}</div><div class="blk" style="height:${heights[i]}px;background:${cols[i]}">${i+1}</div></div>`).join('')}</div>
     <div class="table-scroll"><table class="board">
-      <thead><tr><th>מקום</th><th>צוות</th><th>בית ספר</th><th>ניקוד</th><th>זמן</th><th>לפי שאלות</th><th>תאריך</th></tr></thead>
+      <thead><tr><th>${t('thRank')}</th><th>${t('thTeam')}</th><th>${t('thSchool')}</th><th>${t('thScore')}</th><th>${t('thTime')}</th><th>${t('thPer')}</th><th>${t('thDate')}</th></tr></thead>
       <tbody>${board.map((r,i)=>`<tr class="${r.id===meId?'me':''}">
         <td>${medal[i]||i+1}</td>
-        <td><b>${esc(r.team)}</b>${r.offline?' <span class="muted" title="יובא מהגרסה המקומית">📴</span>':''}${r.members?`<div class="muted" style="font-size:13px">${esc(r.members)}</div>`:''}</td>
+        <td><b>${esc(r.team)}</b>${r.offline?` <span class="muted" title="${t('importedTip')}">📴</span>`:''}${r.members?`<div class="muted" style="font-size:13px">${esc(r.members)}</div>`:''}</td>
         <td>${esc(r.school)}</td><td class="sc">${r.score}</td><td style="direction:ltr;text-align:right">${fmtTime(r.time)}</td>
         <td><div class="mini">${r.per.map(e=>`<i class="${qScoreClass(e)}" title="${e}"></i>`).join('')}</div></td>
         <td class="muted" style="font-size:13px;white-space:nowrap">${fmtDate(r.date)}
-          ${adminPass?`<button class="icon-btn" style="margin-right:8px" title="מחק תוצאה" data-id="${esc(r.id)}" data-team="${esc(r.team)}" onclick="deleteRow(this.dataset.id,this.dataset.team)">🗑</button>`:''}</td></tr>`).join('')}</tbody>
+          ${adminPass?`<button class="icon-btn" style="margin-right:8px" title="${t('deleteTip')}" data-id="${esc(r.id)}" data-team="${esc(r.team)}" onclick="deleteRow(this.dataset.id,this.dataset.team)">🗑</button>`:''}</td></tr>`).join('')}</tbody>
     </table></div>`;
 }
 async function adminCall(data){return api('admin',Object.assign({password:adminPass},data))}
 async function adminLogin(){
   if(OFFLINE){adminPass='local';render();return}
-  const p=await modal('כניסת מארגן','הזינו את סיסמת המארגנים (ADMIN_PASSWORD שהוגדרה ב-Vercel).','כניסה','ביטול',false,true);
+  const p=await modal(t('adminTitle'),t('adminBody'),t('enter'),t('cancel'),false,true);
   if(!p) return;
   try{await api('admin',{password:p,action:'verify'});adminPass=p;render()}
-  catch(e){modal('שגיאה',esc(e.message),'סגור',null)}
+  catch(e){errModal(e)}
 }
 async function deleteRow(id,team){
-  if(!await modal('מחיקת תוצאה',`למחוק את התוצאה של "${esc(team)}"?`,'מחק','ביטול',true)) return;
-  try{await adminCall({action:'delete',id});boardCache=null;render()}catch(e){modal('שגיאה',esc(e.message),'סגור',null)}
+  if(!await modal(t('deleteTitle'),t('deleteBody',esc(team)),t('del'),t('cancel'),true)) return;
+  try{await adminCall({action:'delete',id});boardCache=null;render()}catch(e){errModal(e)}
 }
 async function clearBoard(){
-  if(!await modal('ניקוי טבלת המובילים','כל התוצאות בשרת יימחקו לצמיתות, בכל המחשבים. מומלץ לייצא גיבוי לפני כן. למחוק?','כן, מחק הכל','ביטול',true)) return;
-  try{await adminCall({action:'clear'});boardCache=null;render()}catch(e){modal('שגיאה',esc(e.message),'סגור',null)}
+  if(!await modal(t('clearTitle'),t('clearBody'),t('clearYes'),t('cancel'),true)) return;
+  try{await adminCall({action:'clear'});boardCache=null;render()}catch(e){errModal(e)}
 }
 function importJSON(file){
   if(!file) return;
   const fr=new FileReader();
   fr.onload=async()=>{
     try{
-      const data=JSON.parse(fr.result);if(!Array.isArray(data)) throw new Error('הקובץ אינו גיבוי תקין של המשחק.');
+      const data=JSON.parse(fr.result);if(!Array.isArray(data)) throw new Error(t('badBackup'));
       const r=await adminCall({action:'import',records:data});
-      await modal('ייבוא הושלם',`נוספו ${r.added} תוצאות חדשות לטבלה.`,'סגור',null);boardCache=null;render();
-    }catch(e){modal('שגיאה',esc(e.message||'הקובץ אינו גיבוי תקין של המשחק.'),'סגור',null)}
+      await modal(t('importDone'),t('importAdded',r.added),t('close'),null);boardCache=null;render();
+    }catch(e){errModal(e.message?e:t('badBackup'))}
   };
   fr.readAsText(file);
 }
@@ -508,16 +531,16 @@ function download(name,content,type){
 }
 async function exportCSV(){
   try{
-    const board=await fetchBoard();
-    const rows=[['מקום','צוות','בית ספר','חברי צוות','ניקוד','זמן (שניות)',...KINDS.map((_,i)=>'שאלה '+(i+1)),'שפה','תאריך']];
+    const board=await fetchBoard(),h=t('csv');
+    const rows=[[...h.slice(0,6),...KINDS.map((_,i)=>h[6].replace('{0}',i+1)),h[7],h[8]]];
     board.forEach((r,i)=>rows.push([i+1,r.team,r.school,r.members||'',r.score,r.time,...r.per,r.lang==='cs'?'C#':'Java',fmtDate(r.date)]));
     const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
     download('akko-cs-results.csv',csv,'text/csv;charset=utf-8');
-  }catch(e){modal('שגיאה',esc(e.message),'סגור',null)}
+  }catch(e){errModal(e)}
 }
 async function exportJSON(){
   try{download('akko-cs-backup.json',JSON.stringify(await fetchBoard(),null,1),'application/json')}
-  catch(e){modal('שגיאה',esc(e.message),'סגור',null)}
+  catch(e){errModal(e)}
 }
 
 /* ---------- אפקטים ---------- */
@@ -545,4 +568,5 @@ function confetti(){
   })();
 }
 
+applyLang();
 render();
